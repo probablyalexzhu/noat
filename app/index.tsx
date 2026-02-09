@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,10 +12,31 @@ import {
   type KeyboardEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  createConversation,
+  getConversations,
+  createMessage,
+  getMessages,
+} from "@/lib/database";
 
 export default function Index() {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [text, setText] = useState("");
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    const convos = getConversations();
+    let id: string;
+    if (convos.length > 0) {
+      id = (convos[0] as any).id;
+    } else {
+      id = createConversation();
+    }
+    setConversationId(id);
+    setMessages(getMessages(id) as any[]);
+  }, []);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", handleKeyboardShow);
@@ -34,6 +56,10 @@ export default function Index() {
   };
 
   const handleSubmit = () => {
+    const trimmed = text.trim();
+    if (!trimmed || !conversationId) return;
+    createMessage(conversationId, trimmed);
+    setMessages(getMessages(conversationId) as any[]);
     setText("");
   };
 
@@ -43,7 +69,19 @@ export default function Index() {
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.content} />
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.content}
+          onContentSizeChange={() =>
+            scrollViewRef.current?.scrollToEnd({ animated: true })
+          }
+        >
+          {messages.map((msg) => (
+            <Text key={msg.id} style={styles.messageText}>
+              {msg.content}
+            </Text>
+          ))}
+        </ScrollView>
 
         {isKeyboardVisible && (
           <Pressable style={styles.dismissButton} onPress={Keyboard.dismiss}>
@@ -75,6 +113,12 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    paddingHorizontal: 16,
+  },
+  messageText: {
+    color: "#fff",
+    fontSize: 16,
+    paddingVertical: 4,
   },
   dismissButton: {
     alignSelf: "center",
