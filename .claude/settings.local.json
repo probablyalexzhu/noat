@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:docs.expo.dev)",
+      "WebFetch(domain:docs.swmansion.com)",
+      "Bash(npx expo lint --fix)",
+      "Bash(npx expo lint:*)",
+      "Bash(npx expo install @expensify/react-native-live-markdown react-native-worklets@~0.7.0)",
+      "Bash(npm ls:*)"
+    ]
+  }
+}
