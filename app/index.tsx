@@ -24,11 +24,18 @@ import {
   type ThemeMode,
 } from '@/lib/database';
 import { palettes, themeOrder, type Colors } from '@/lib/theme';
-import ThemePicker from '@/components/ThemePicker';
-import NotePage from '@/components/NotePage';
-import DotIndicator from '@/components/DotIndicator';
 import AddNoteButton from '@/components/AddNoteButton';
 import DeleteNoteButton from '@/components/DeleteNoteButton';
+import DotIndicator from '@/components/DotIndicator';
+import NotePage from '@/components/NotePage';
+import ThemePicker from '@/components/ThemePicker';
+
+const AUTOSAVE_DELAY_MS = 300;
+const SCROLL_ANIMATION_DELAY_MS = 50;
+const KEYBOARD_SUPPRESS_DELAY_MS = 120;
+const DOT_INDICATOR_HEIGHT = 23;
+const BOTTOM_BAR_HEIGHT = 54;
+const DEFAULT_THEME: ThemeMode = 'dark';
 
 export default function Index() {
   const { width } = useWindowDimensions();
@@ -43,58 +50,72 @@ export default function Index() {
   const flatListRef = useRef<FlatList>(null);
   const suppressKeyboardRef = useRef(false);
 
-  // Initialize: load all conversations
   useEffect(() => {
     const convos = getConversationsByCreationOrder();
+
     if (convos.length > 0) {
       const ids = convos.map((c) => c.id);
-      for (let i = 0; i < convos.length; i++) {
-        const c = convos[i];
-        contentCache.current.set(c.id, c.content ?? '');
-        latestContents.current.set(c.id, c.content ?? '');
-        const theme = c.theme as ThemeMode | null;
-        if (theme && themeOrder.includes(theme)) {
-          noteThemes.current.set(c.id, theme);
-        } else {
-          // Assign spread across themeOrder for legacy notes with null theme
-          const assigned = themeOrder[i % themeOrder.length];
-          noteThemes.current.set(c.id, assigned);
-          updateNoteTheme(c.id, assigned);
+
+      convos.forEach((convo, index) => {
+        const content = convo.content ?? '';
+        contentCache.current.set(convo.id, content);
+        latestContents.current.set(convo.id, content);
+
+        const theme = getValidThemeOrAssignDefault(convo.theme, index);
+        noteThemes.current.set(convo.id, theme);
+
+        if (!convo.theme || !themeOrder.includes(convo.theme as ThemeMode)) {
+          updateNoteTheme(convo.id, theme);
         }
-      }
+      });
+
       setNoteIds(ids);
     } else {
-      const id = createConversation('Untitled', 'dark');
+      const id = createConversation('Untitled', DEFAULT_THEME);
       contentCache.current.set(id, '');
       latestContents.current.set(id, '');
-      noteThemes.current.set(id, 'dark');
+      noteThemes.current.set(id, DEFAULT_THEME);
       setNoteIds([id]);
     }
   }, []);
 
-  // Keyboard listeners
+  function getValidThemeOrAssignDefault(
+    themeValue: string | null,
+    fallbackIndex: number,
+  ): ThemeMode {
+    if (themeValue && themeOrder.includes(themeValue as ThemeMode)) {
+      return themeValue as ThemeMode;
+    }
+    return themeOrder[fallbackIndex % themeOrder.length];
+  }
+
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (_e: KeyboardEvent) => {
+
+    const handleKeyboardShow = (_e: KeyboardEvent) => {
       if (suppressKeyboardRef.current) {
         Keyboard.dismiss();
         return;
       }
       setIsKeyboardVisible(true);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, (_e: KeyboardEvent) =>
-      setIsKeyboardVisible(false),
-    );
+    };
+
+    const handleKeyboardHide = (_e: KeyboardEvent) => {
+      setIsKeyboardVisible(false);
+    };
+
+    const showSub = Keyboard.addListener(showEvent, handleKeyboardShow);
+    const hideSub = Keyboard.addListener(hideEvent, handleKeyboardHide);
+
     return () => {
       showSub.remove();
       hideSub.remove();
     };
   }, []);
 
-  // Flush saves on background / unmount
   useEffect(() => {
-    const flushAll = () => {
+    const flushAllPendingSaves = () => {
       for (const [noteId, timer] of saveTimers.current.entries()) {
         clearTimeout(timer);
         const text = latestContents.current.get(noteId);
@@ -105,41 +126,51 @@ export default function Index() {
       saveTimers.current.clear();
     };
 
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'background') flushAll();
-    });
+    const handleAppStateChange = (state: string) => {
+      if (state === 'background') {
+        flushAllPendingSaves();
+      }
+    };
+
+    const sub = AppState.addEventListener('change', handleAppStateChange);
 
     return () => {
       sub.remove();
-      flushAll();
+      flushAllPendingSaves();
     };
   }, []);
 
-  // Derive active colors from the active note's theme
+  const insets = useSafeAreaInsets();
+
   const activeNoteId = noteIds[activeIndex];
-  const activeTheme = activeNoteId ? (noteThemes.current.get(activeNoteId) ?? 'dark') : 'dark';
+  const activeTheme = getThemeForNote(activeNoteId);
   const activeColors = palettes[activeTheme];
 
-  const insets = useSafeAreaInsets();
-  const DOT_INDICATOR_HEIGHT = 23; // paddingVertical 8 + dot 7 + paddingVertical 8
-  const BOTTOM_BAR_HEIGHT = 54; // button ~48 + paddingBottom 6
   const contentPaddingTop = insets.top + DOT_INDICATOR_HEIGHT;
   const contentPaddingBottom = insets.bottom + BOTTOM_BAR_HEIGHT;
+
+  function getThemeForNote(noteId: string | undefined): ThemeMode {
+    if (!noteId) {
+      return DEFAULT_THEME;
+    }
+    return noteThemes.current.get(noteId) ?? DEFAULT_THEME;
+  }
 
   const handleChangeText = useCallback((noteId: string, text: string) => {
     contentCache.current.set(noteId, text);
     latestContents.current.set(noteId, text);
 
     const existing = saveTimers.current.get(noteId);
-    if (existing) clearTimeout(existing);
+    if (existing) {
+      clearTimeout(existing);
+    }
 
-    saveTimers.current.set(
-      noteId,
-      setTimeout(() => {
-        updateNoteContent(noteId, text);
-        saveTimers.current.delete(noteId);
-      }, 300),
-    );
+    const timer = setTimeout(() => {
+      updateNoteContent(noteId, text);
+      saveTimers.current.delete(noteId);
+    }, AUTOSAVE_DELAY_MS);
+
+    saveTimers.current.set(noteId, timer);
   }, []);
 
   const flushNote = useCallback((noteId: string) => {
@@ -157,52 +188,54 @@ export default function Index() {
   const handleMomentumScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+
       if (newIndex !== activeIndex && noteIds[activeIndex]) {
         flushNote(noteIds[activeIndex]);
       }
+
       setActiveIndex(newIndex);
+
       setTimeout(() => {
         suppressKeyboardRef.current = false;
-      }, 120);
+      }, KEYBOARD_SUPPRESS_DELAY_MS);
     },
     [width, activeIndex, noteIds, flushNote],
   );
 
   const handleAddNote = useCallback(() => {
-    // Pick next theme in rotation from current page's theme
-    const currentTheme = noteIds[activeIndex]
-      ? (noteThemes.current.get(noteIds[activeIndex]) ?? 'dark')
-      : 'dark';
+    const currentTheme = getThemeForNote(noteIds[activeIndex]);
     const currentThemeIndex = themeOrder.indexOf(currentTheme);
     const nextTheme = themeOrder[(currentThemeIndex + 1) % themeOrder.length];
 
     const id = createConversation('Untitled', nextTheme);
+
     contentCache.current.set(id, '');
     latestContents.current.set(id, '');
     noteThemes.current.set(id, nextTheme);
+
     setThemeVersion((v) => v + 1);
     setNoteIds((prev) => {
       const next = [...prev, id];
-      // Scroll to new note after state update
+
       setTimeout(() => {
-        flatListRef.current?.scrollToIndex({ index: next.length - 1, animated: true });
-        setActiveIndex(next.length - 1);
-      }, 50);
+        const lastIndex = next.length - 1;
+        flatListRef.current?.scrollToIndex({ index: lastIndex, animated: true });
+        setActiveIndex(lastIndex);
+      }, SCROLL_ANIMATION_DELAY_MS);
+
       return next;
     });
   }, [noteIds, activeIndex]);
 
   const handleDeleteNote = useCallback(() => {
     const noteId = noteIds[activeIndex];
-    if (!noteId) return;
+    if (!noteId) {
+      return;
+    }
 
-    // Flush any pending save
     flushNote(noteId);
-
-    // Soft-delete in database
     deleteConversation(noteId);
 
-    // Clean up caches
     contentCache.current.delete(noteId);
     latestContents.current.delete(noteId);
     noteThemes.current.delete(noteId);
@@ -210,11 +243,10 @@ export default function Index() {
     const remaining = noteIds.filter((id) => id !== noteId);
 
     if (remaining.length === 0) {
-      // Last note deleted — create a fresh blank one
-      const newId = createConversation('Untitled', 'dark');
+      const newId = createConversation('Untitled', DEFAULT_THEME);
       contentCache.current.set(newId, '');
       latestContents.current.set(newId, '');
-      noteThemes.current.set(newId, 'dark');
+      noteThemes.current.set(newId, DEFAULT_THEME);
       setNoteIds([newId]);
       setActiveIndex(0);
     } else {
@@ -222,6 +254,7 @@ export default function Index() {
       setNoteIds(remaining);
       setActiveIndex(newIndex);
     }
+
     setThemeVersion((v) => v + 1);
   }, [noteIds, activeIndex, flushNote]);
 
@@ -238,8 +271,9 @@ export default function Index() {
 
   const renderItem = useCallback(
     ({ item }: { item: string }) => {
-      const itemTheme = noteThemes.current.get(item) ?? 'dark';
+      const itemTheme = getThemeForNote(item);
       const itemColors = palettes[itemTheme];
+
       return (
         <NotePage
           noteId={item}
@@ -266,8 +300,10 @@ export default function Index() {
     [width],
   );
 
-  // Build dot accent colors array
-  const dotColors = noteIds.map((id) => palettes[noteThemes.current.get(id) ?? 'dark'].accent);
+  const dotColors = noteIds.map((id) => {
+    const theme = getThemeForNote(id);
+    return palettes[theme].accent;
+  });
 
   const styles = makeStyles(activeColors);
 

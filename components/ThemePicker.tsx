@@ -12,6 +12,7 @@ import type { ThemeMode } from '@/lib/database';
 
 const TRIGGER_SIZE = 48;
 const OPTION_SIZE = 40;
+const COLLAPSE_ANIMATION_DELAY_MS = 150;
 
 const springConfig = { damping: 20, stiffness: 300 };
 
@@ -84,8 +85,7 @@ export default function ThemePicker({ currentTheme, onSelectTheme }: ThemePicker
 
   const collapse = () => {
     progress.value = withSpring(0, springConfig);
-    // Delay unmounting the backdrop so the closing animation plays
-    setTimeout(() => setOpen(false), 150);
+    setTimeout(() => setOpen(false), COLLAPSE_ANIMATION_DELAY_MS);
   };
 
   const selectTheme = (theme: ThemeMode) => {

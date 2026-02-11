@@ -34,12 +34,14 @@ function NotePage({
 
   return (
     <ScrollView
-      style={{ width, flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{
-        flexGrow: 1,
-        paddingTop: contentPaddingTop,
-        paddingBottom: contentPaddingBottom,
-      }}
+      style={[styles.scrollView, { width, backgroundColor: colors.background }]}
+      contentContainerStyle={[
+        styles.contentContainer,
+        {
+          paddingTop: contentPaddingTop,
+          paddingBottom: contentPaddingBottom,
+        },
+      ]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="none"
     >
@@ -62,6 +64,12 @@ function NotePage({
 }
 
 const styles = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
+  },
   editor: {
     flex: 1,
     fontSize: 16,

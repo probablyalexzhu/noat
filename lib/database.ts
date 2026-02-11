@@ -1,27 +1,7 @@
-// database.ts
-// ============================================
-// This file handles everything SQLite-related.
-// Import it once in your app's entry point and call initDatabase().
-// Then use the helper functions everywhere else.
-// ============================================
-
 import * as SQLite from 'expo-sqlite';
 import * as Crypto from 'expo-crypto';
 
-// ============================================
-// 1. OPEN THE DATABASE
-// ============================================
-// This creates the file if it doesn't exist.
-// On iOS it lives in the app's sandboxed Documents directory.
-// On Android it's in the app's private database directory.
-
 const db = SQLite.openDatabaseSync('notes.db');
-
-// ============================================
-// 2. CREATE TABLES (runs once on first launch)
-// ============================================
-// SQLite's "IF NOT EXISTS" makes this safe to call every time
-// the app starts — it won't wipe existing data.
 
 export function initDatabase() {
   db.execSync(`
@@ -66,91 +46,91 @@ export function initDatabase() {
     );
   `);
 
-  // Seed the sync_log with initial values if empty
-  const row = db.getFirstSync('SELECT table_name FROM sync_log WHERE table_name = ?', ['messages']);
-  if (!row) {
-    db.runSync(
-      'INSERT INTO sync_log (table_name, last_synced_at, last_pushed_at) VALUES (?, ?, ?)',
-      ['messages', '1970-01-01T00:00:00Z', '1970-01-01T00:00:00Z'],
-    );
-    db.runSync(
-      'INSERT INTO sync_log (table_name, last_synced_at, last_pushed_at) VALUES (?, ?, ?)',
-      ['conversations', '1970-01-01T00:00:00Z', '1970-01-01T00:00:00Z'],
-    );
-  }
-
-  // Add content column to conversations (for note editor)
-  try {
-    db.execSync(`ALTER TABLE conversations ADD COLUMN content TEXT DEFAULT '';`);
-  } catch (_) {
-    // Column already exists — safe to ignore
-  }
-
-  // Add theme column to conversations (per-page theme)
-  try {
-    db.execSync(`ALTER TABLE conversations ADD COLUMN theme TEXT DEFAULT 'dark';`);
-  } catch (_) {
-    // Column already exists — safe to ignore
-  }
+  seedSyncLogIfEmpty();
+  addContentColumnIfNeeded();
+  addThemeColumnIfNeeded();
 
   console.log('Database initialized ✓');
 }
 
-// ============================================
-// 3. DEVICE ID — Unique per install
-// ============================================
-// Generated once, stored in app_config, reused forever.
+function seedSyncLogIfEmpty() {
+  const row = db.getFirstSync('SELECT table_name FROM sync_log WHERE table_name = ?', ['messages']);
+  if (!row) {
+    const initialTimestamp = '1970-01-01T00:00:00Z';
+    db.runSync(
+      'INSERT INTO sync_log (table_name, last_synced_at, last_pushed_at) VALUES (?, ?, ?)',
+      ['messages', initialTimestamp, initialTimestamp],
+    );
+    db.runSync(
+      'INSERT INTO sync_log (table_name, last_synced_at, last_pushed_at) VALUES (?, ?, ?)',
+      ['conversations', initialTimestamp, initialTimestamp],
+    );
+  }
+}
+
+function addContentColumnIfNeeded() {
+  try {
+    db.execSync(`ALTER TABLE conversations ADD COLUMN content TEXT DEFAULT '';`);
+  } catch {
+    // Column already exists
+  }
+}
+
+function addThemeColumnIfNeeded() {
+  try {
+    db.execSync(`ALTER TABLE conversations ADD COLUMN theme TEXT DEFAULT 'dark';`);
+  } catch {
+    // Column already exists
+  }
+}
+
+type ConfigRow = { value: string };
+
+function getOrCreateConfigValue(key: string): string {
+  const row = db.getFirstSync('SELECT value FROM app_config WHERE key = ?', [
+    key,
+  ]) as ConfigRow | null;
+  if (row) {
+    return row.value;
+  }
+
+  const id = Crypto.randomUUID();
+  db.runSync('INSERT INTO app_config (key, value) VALUES (?, ?)', [key, id]);
+  return id;
+}
 
 export function getDeviceId(): string {
-  const row = db.getFirstSync('SELECT value FROM app_config WHERE key = ?', ['device_id']);
-  if (row) return (row as any).value;
-
-  const id = Crypto.randomUUID();
-  db.runSync('INSERT INTO app_config (key, value) VALUES (?, ?)', ['device_id', id]);
-  return id;
+  return getOrCreateConfigValue('device_id');
 }
-
-// ============================================
-// 4. TEMPORARY USER ID (until you add auth)
-// ============================================
-// For now, we generate a fake user ID per device.
-// When you add Supabase Auth later, replace this with
-// the real authenticated user's ID.
 
 export function getUserId(): string {
-  const row = db.getFirstSync('SELECT value FROM app_config WHERE key = ?', ['user_id']);
-  if (row) return (row as any).value;
-
-  const id = Crypto.randomUUID();
-  db.runSync('INSERT INTO app_config (key, value) VALUES (?, ?)', ['user_id', id]);
-  return id;
+  return getOrCreateConfigValue('user_id');
 }
-
-// ============================================
-// 5. THEME PREFERENCE
-// ============================================
 
 export type ThemeMode = 'paper' | 'forest' | 'ios' | 'dark' | 'cyberpunk';
 
-const validThemes: ThemeMode[] = ['paper', 'forest', 'ios', 'dark', 'cyberpunk'];
+const VALID_THEMES: ThemeMode[] = ['paper', 'forest', 'ios', 'dark', 'cyberpunk'];
+const DEFAULT_THEME: ThemeMode = 'dark';
 
 export function getTheme(): ThemeMode {
-  const row = db.getFirstSync('SELECT value FROM app_config WHERE key = ?', ['theme']);
+  const row = db.getFirstSync('SELECT value FROM app_config WHERE key = ?', [
+    'theme',
+  ]) as ConfigRow | null;
   if (row) {
-    const stored = (row as any).value;
-    if (stored === 'light') return 'ios';
-    if (validThemes.includes(stored)) return stored as ThemeMode;
+    const stored = row.value;
+    if (stored === 'light') {
+      return 'ios';
+    }
+    if (VALID_THEMES.includes(stored as ThemeMode)) {
+      return stored as ThemeMode;
+    }
   }
-  return 'dark';
+  return DEFAULT_THEME;
 }
 
 export function setTheme(mode: ThemeMode) {
   db.runSync('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)', ['theme', mode]);
 }
-
-// ============================================
-// 6. TYPES
-// ============================================
 
 export type Conversation = {
   id: string;
@@ -165,12 +145,12 @@ export type Conversation = {
   device_id: string;
 };
 
-// ============================================
-// 7. CRUD — Conversations
-// ============================================
+function getCurrentTimestamp(): string {
+  return new Date().toISOString();
+}
 
 export function createConversation(title: string = 'Untitled', theme: ThemeMode = 'dark'): string {
-  const now = new Date().toISOString();
+  const now = getCurrentTimestamp();
   const id = Crypto.randomUUID();
   const deviceId = getDeviceId();
   const userId = getUserId();
@@ -203,19 +183,15 @@ export function getConversationsByCreationOrder(): Conversation[] {
 }
 
 export function deleteConversation(conversationId: string) {
-  const now = new Date().toISOString();
+  const now = getCurrentTimestamp();
   db.runSync(
     `UPDATE conversations SET deleted_at = ?, updated_at = ?, is_synced = 0 WHERE id = ?`,
     [now, now, conversationId],
   );
 }
 
-// ============================================
-// 6. CRUD — Messages
-// ============================================
-
 export function createMessage(conversationId: string, content: string): string {
-  const now = new Date().toISOString();
+  const now = getCurrentTimestamp();
   const id = Crypto.randomUUID();
   const deviceId = getDeviceId();
   const userId = getUserId();
@@ -226,7 +202,6 @@ export function createMessage(conversationId: string, content: string): string {
     [id, conversationId, userId, content, now, now, deviceId],
   );
 
-  // Also bump the conversation's updated_at so it sorts to the top
   db.runSync(`UPDATE conversations SET updated_at = ?, is_synced = 0 WHERE id = ?`, [
     now,
     conversationId,
@@ -245,7 +220,7 @@ export function getMessages(conversationId: string) {
 }
 
 export function editMessage(messageId: string, newContent: string) {
-  const now = new Date().toISOString();
+  const now = getCurrentTimestamp();
   db.runSync(`UPDATE messages SET content = ?, updated_at = ?, is_synced = 0 WHERE id = ?`, [
     newContent,
     now,
@@ -254,7 +229,7 @@ export function editMessage(messageId: string, newContent: string) {
 }
 
 export function deleteMessage(messageId: string) {
-  const now = new Date().toISOString();
+  const now = getCurrentTimestamp();
   db.runSync(`UPDATE messages SET deleted_at = ?, updated_at = ?, is_synced = 0 WHERE id = ?`, [
     now,
     now,
@@ -262,17 +237,17 @@ export function deleteMessage(messageId: string) {
   ]);
 }
 
-// ============================================
-// 7. NOTE CONTENT
-// ============================================
+type ContentRow = { content: string };
 
 export function getNoteContent(noteId: string): string {
-  const row = db.getFirstSync('SELECT content FROM conversations WHERE id = ?', [noteId]);
-  return (row as any)?.content ?? '';
+  const row = db.getFirstSync('SELECT content FROM conversations WHERE id = ?', [
+    noteId,
+  ]) as ContentRow | null;
+  return row?.content ?? '';
 }
 
 export function updateNoteContent(noteId: string, content: string): void {
-  const now = new Date().toISOString();
+  const now = getCurrentTimestamp();
   db.runSync('UPDATE conversations SET content = ?, updated_at = ?, is_synced = 0 WHERE id = ?', [
     content,
     now,
@@ -281,7 +256,7 @@ export function updateNoteContent(noteId: string, content: string): void {
 }
 
 export function updateNoteTheme(noteId: string, theme: ThemeMode): void {
-  const now = new Date().toISOString();
+  const now = getCurrentTimestamp();
   db.runSync('UPDATE conversations SET theme = ?, updated_at = ?, is_synced = 0 WHERE id = ?', [
     theme,
     now,
@@ -289,7 +264,4 @@ export function updateNoteTheme(noteId: string, theme: ThemeMode): void {
   ]);
 }
 
-// ============================================
-// 8. EXPORT THE DB (for sync layer later)
-// ============================================
 export { db };
