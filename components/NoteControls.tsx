@@ -1,10 +1,10 @@
-import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import type { ThemeMode, Colors } from '@/lib/theme';
 import AddNoteButton from '@/components/AddNoteButton';
 import DeleteNoteButton from '@/components/DeleteNoteButton';
 import DotIndicator from '@/components/DotIndicator';
 import ThemePicker from '@/components/ThemePicker';
+import type { Colors, ThemeMode } from '@/lib/theme';
+import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type NoteControlsProps = {
   dotColors: string[];
@@ -71,10 +71,10 @@ const makeStyles = (colors: Colors) =>
       width: 36,
       height: 36,
       borderRadius: 18,
-      marginBottom: 6,
       backgroundColor: colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
+      marginBottom: -20,
     },
     dismissArrow: {
       color: colors.text,
