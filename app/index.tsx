@@ -1,56 +1,49 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AppState,
   FlatList,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
-  Text,
-  TextInput,
   View,
   useWindowDimensions,
-  type KeyboardEvent,
-  type NativeSyntheticEvent,
-  type NativeScrollEvent,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   createConversation,
   deleteConversation,
   getConversationsByCreationOrder,
-  updateNoteContent,
   updateNoteTheme,
   type ThemeMode,
 } from '@/lib/database';
 import { palettes, themeOrder, type Colors } from '@/lib/theme';
-import AddNoteButton from '@/components/AddNoteButton';
-import DeleteNoteButton from '@/components/DeleteNoteButton';
-import DotIndicator from '@/components/DotIndicator';
+import NoteControls from '@/components/NoteControls';
 import NotePage from '@/components/NotePage';
-import ThemePicker from '@/components/ThemePicker';
+import { useAutosave } from '@/hooks/useAutosave';
+import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 
-const AUTOSAVE_DELAY_MS = 300;
 const SCROLL_ANIMATION_DELAY_MS = 50;
 const DOT_INDICATOR_HEIGHT = 23;
 const BOTTOM_BAR_HEIGHT = 54;
-const DEFAULT_THEME: ThemeMode = 'dark';
+const DEFAULT_THEME: ThemeMode = 'paper';
 
 export default function Index() {
   const { width } = useWindowDimensions();
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [noteIds, setNoteIds] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [themeVersion, setThemeVersion] = useState(0);
-  const contentCache = useRef(new Map<string, string>());
-  const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const latestContents = useRef(new Map<string, string>());
   const noteThemes = useRef(new Map<string, ThemeMode>());
   const flatListRef = useRef<FlatList>(null);
-  const inputRefs = useRef(new Map<string, TextInput>());
-  const isKeyboardVisibleRef = useRef(false);
-  const wasKeyboardOpenRef = useRef(false);
+
+  const { contentCache, latestContents, handleChangeText, flushNote } = useAutosave();
+
+  const { isKeyboardVisible, registerInputRef, handleTouchStart, handleMomentumScrollEnd } =
+    useKeyboardNavigation({
+      width,
+      activeIndex,
+      noteIds,
+      onPageChange: setActiveIndex,
+      flushNote,
+    });
 
   useEffect(() => {
     const convos = getConversationsByCreationOrder();
@@ -81,6 +74,15 @@ export default function Index() {
     }
   }, []);
 
+  const insets = useSafeAreaInsets();
+
+  const activeNoteId = noteIds[activeIndex];
+  const activeTheme = getThemeForNote(activeNoteId);
+  const activeColors = palettes[activeTheme];
+
+  const contentPaddingTop = insets.top + DOT_INDICATOR_HEIGHT;
+  const contentPaddingBottom = insets.bottom + BOTTOM_BAR_HEIGHT;
+
   function getValidThemeOrAssignDefault(
     themeValue: string | null,
     fallbackIndex: number,
@@ -91,131 +93,12 @@ export default function Index() {
     return themeOrder[fallbackIndex % themeOrder.length];
   }
 
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const handleKeyboardShow = (_e: KeyboardEvent) => {
-      isKeyboardVisibleRef.current = true;
-      setIsKeyboardVisible(true);
-    };
-
-    const handleKeyboardHide = (_e: KeyboardEvent) => {
-      isKeyboardVisibleRef.current = false;
-      setIsKeyboardVisible(false);
-    };
-
-    const showSub = Keyboard.addListener(showEvent, handleKeyboardShow);
-    const hideSub = Keyboard.addListener(hideEvent, handleKeyboardHide);
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    const flushAllPendingSaves = () => {
-      for (const [noteId, timer] of saveTimers.current.entries()) {
-        clearTimeout(timer);
-        const text = latestContents.current.get(noteId);
-        if (text !== undefined) {
-          updateNoteContent(noteId, text);
-        }
-      }
-      saveTimers.current.clear();
-    };
-
-    const handleAppStateChange = (state: string) => {
-      if (state === 'background') {
-        flushAllPendingSaves();
-      }
-    };
-
-    const sub = AppState.addEventListener('change', handleAppStateChange);
-
-    return () => {
-      sub.remove();
-      flushAllPendingSaves();
-    };
-  }, []);
-
-  const insets = useSafeAreaInsets();
-
-  const activeNoteId = noteIds[activeIndex];
-  const activeTheme = getThemeForNote(activeNoteId);
-  const activeColors = palettes[activeTheme];
-
-  const contentPaddingTop = insets.top + DOT_INDICATOR_HEIGHT;
-  const contentPaddingBottom = insets.bottom + BOTTOM_BAR_HEIGHT;
-
   function getThemeForNote(noteId: string | undefined): ThemeMode {
     if (!noteId) {
       return DEFAULT_THEME;
     }
     return noteThemes.current.get(noteId) ?? DEFAULT_THEME;
   }
-
-  const registerInputRef = useCallback((noteId: string, ref: TextInput | null) => {
-    if (ref) {
-      inputRefs.current.set(noteId, ref);
-    } else {
-      inputRefs.current.delete(noteId);
-    }
-  }, []);
-
-  const handleChangeText = useCallback((noteId: string, text: string) => {
-    contentCache.current.set(noteId, text);
-    latestContents.current.set(noteId, text);
-
-    const existing = saveTimers.current.get(noteId);
-    if (existing) {
-      clearTimeout(existing);
-    }
-
-    const timer = setTimeout(() => {
-      updateNoteContent(noteId, text);
-      saveTimers.current.delete(noteId);
-    }, AUTOSAVE_DELAY_MS);
-
-    saveTimers.current.set(noteId, timer);
-  }, []);
-
-  const flushNote = useCallback((noteId: string) => {
-    const timer = saveTimers.current.get(noteId);
-    if (timer) {
-      clearTimeout(timer);
-      saveTimers.current.delete(noteId);
-      const text = latestContents.current.get(noteId);
-      if (text !== undefined) {
-        updateNoteContent(noteId, text);
-      }
-    }
-  }, []);
-
-  const handleTouchStart = useCallback(() => {
-    wasKeyboardOpenRef.current = isKeyboardVisibleRef.current;
-  }, []);
-
-  const handleMomentumScrollEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
-      const pageChanged = newIndex !== activeIndex;
-
-      if (pageChanged && noteIds[activeIndex]) {
-        flushNote(noteIds[activeIndex]);
-      }
-
-      setActiveIndex(newIndex);
-
-      if (pageChanged && wasKeyboardOpenRef.current) {
-        inputRefs.current.get(noteIds[newIndex])?.focus();
-      } else if (pageChanged) {
-        Keyboard.dismiss();
-      }
-    },
-    [width, activeIndex, noteIds, flushNote],
-  );
 
   const handleAddNote = useCallback(() => {
     const currentTheme = getThemeForNote(noteIds[activeIndex]);
@@ -349,31 +232,16 @@ export default function Index() {
             style={StyleSheet.absoluteFill}
           />
 
-          <SafeAreaView style={styles.chromeOverlay} pointerEvents="box-none">
-            <DotIndicator dotColors={dotColors} activeIndex={activeIndex} />
-
-            <View style={styles.flex1} pointerEvents="none" />
-
-            {isKeyboardVisible && (
-              <Pressable style={styles.dismissButton} onPress={Keyboard.dismiss}>
-                <Text style={styles.dismissArrow}>↓</Text>
-              </Pressable>
-            )}
-
-            {!isKeyboardVisible && (
-              <View style={styles.bottomBar}>
-                <View style={styles.deleteButtonContainer}>
-                  <DeleteNoteButton onPress={handleDeleteNote} colors={activeColors} />
-                </View>
-                <View style={styles.themePickerContainer}>
-                  <ThemePicker currentTheme={activeTheme} onSelectTheme={handleThemeChange} />
-                </View>
-                <View style={styles.addButtonContainer}>
-                  <AddNoteButton onPress={handleAddNote} colors={activeColors} />
-                </View>
-              </View>
-            )}
-          </SafeAreaView>
+          <NoteControls
+            dotColors={dotColors}
+            activeIndex={activeIndex}
+            activeTheme={activeTheme}
+            activeColors={activeColors}
+            isKeyboardVisible={isKeyboardVisible}
+            onDeleteNote={handleDeleteNote}
+            onAddNote={handleAddNote}
+            onThemeChange={handleThemeChange}
+          />
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -388,42 +256,5 @@ const makeStyles = (colors: Colors) =>
     },
     flex1: {
       flex: 1,
-    },
-    chromeOverlay: {
-      ...StyleSheet.absoluteFillObject,
-    },
-    dismissButton: {
-      alignSelf: 'center',
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      marginBottom: 6,
-      backgroundColor: colors.surface,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    dismissArrow: {
-      color: colors.text,
-      fontSize: 18,
-      lineHeight: 20,
-    },
-    bottomBar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingBottom: 6,
-    },
-    deleteButtonContainer: {
-      flex: 1,
-      alignItems: 'flex-start',
-    },
-    themePickerContainer: {
-      flex: 1,
-      alignItems: 'center',
-    },
-    addButtonContainer: {
-      flex: 1,
-      alignItems: 'flex-end',
     },
   });

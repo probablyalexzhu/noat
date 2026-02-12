@@ -16,6 +16,18 @@ type NotePageProps = {
   isKeyboardVisible: boolean;
 };
 
+/**
+ * Keyboard interaction with the swipe-based FlatList:
+ *
+ * - `pointerEvents="none"` on the TextInput when keyboard is closed prevents
+ *   swipe touches from inadvertently focusing the input and opening the keyboard.
+ * - The Pressable wrapper (disabled when keyboard is open) catches intentional
+ *   taps and calls `.focus()`, giving the user a clear way to start typing.
+ * - When the keyboard is already open, Pressable disables itself so touches
+ *   pass through directly to the TextInput for normal cursor positioning.
+ *
+ * See hooks/useKeyboardNavigation.ts for the full keyboard/swipe model.
+ */
 function NotePage({
   noteId,
   initialContent,
@@ -71,7 +83,7 @@ function NotePage({
           scrollEnabled={false}
           value={content}
           onChangeText={handleChange}
-          placeholder="Start typing..."
+          placeholder="Noat to self..."
           placeholderTextColor={colors.placeholder}
           textAlignVertical="top"
           autoCorrect={false}
