@@ -8,6 +8,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
   type KeyboardEvent,
@@ -32,7 +33,6 @@ import ThemePicker from '@/components/ThemePicker';
 
 const AUTOSAVE_DELAY_MS = 300;
 const SCROLL_ANIMATION_DELAY_MS = 50;
-const KEYBOARD_SUPPRESS_DELAY_MS = 120;
 const DOT_INDICATOR_HEIGHT = 23;
 const BOTTOM_BAR_HEIGHT = 54;
 const DEFAULT_THEME: ThemeMode = 'dark';
@@ -48,7 +48,9 @@ export default function Index() {
   const latestContents = useRef(new Map<string, string>());
   const noteThemes = useRef(new Map<string, ThemeMode>());
   const flatListRef = useRef<FlatList>(null);
-  const suppressKeyboardRef = useRef(false);
+  const inputRefs = useRef(new Map<string, TextInput>());
+  const isKeyboardVisibleRef = useRef(false);
+  const wasKeyboardOpenRef = useRef(false);
 
   useEffect(() => {
     const convos = getConversationsByCreationOrder();
@@ -94,14 +96,12 @@ export default function Index() {
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const handleKeyboardShow = (_e: KeyboardEvent) => {
-      if (suppressKeyboardRef.current) {
-        Keyboard.dismiss();
-        return;
-      }
+      isKeyboardVisibleRef.current = true;
       setIsKeyboardVisible(true);
     };
 
     const handleKeyboardHide = (_e: KeyboardEvent) => {
+      isKeyboardVisibleRef.current = false;
       setIsKeyboardVisible(false);
     };
 
@@ -156,6 +156,14 @@ export default function Index() {
     return noteThemes.current.get(noteId) ?? DEFAULT_THEME;
   }
 
+  const registerInputRef = useCallback((noteId: string, ref: TextInput | null) => {
+    if (ref) {
+      inputRefs.current.set(noteId, ref);
+    } else {
+      inputRefs.current.delete(noteId);
+    }
+  }, []);
+
   const handleChangeText = useCallback((noteId: string, text: string) => {
     contentCache.current.set(noteId, text);
     latestContents.current.set(noteId, text);
@@ -185,19 +193,26 @@ export default function Index() {
     }
   }, []);
 
+  const handleTouchStart = useCallback(() => {
+    wasKeyboardOpenRef.current = isKeyboardVisibleRef.current;
+  }, []);
+
   const handleMomentumScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+      const pageChanged = newIndex !== activeIndex;
 
-      if (newIndex !== activeIndex && noteIds[activeIndex]) {
+      if (pageChanged && noteIds[activeIndex]) {
         flushNote(noteIds[activeIndex]);
       }
 
       setActiveIndex(newIndex);
 
-      setTimeout(() => {
-        suppressKeyboardRef.current = false;
-      }, KEYBOARD_SUPPRESS_DELAY_MS);
+      if (pageChanged && wasKeyboardOpenRef.current) {
+        inputRefs.current.get(noteIds[newIndex])?.focus();
+      } else if (pageChanged) {
+        Keyboard.dismiss();
+      }
     },
     [width, activeIndex, noteIds, flushNote],
   );
@@ -279,14 +294,16 @@ export default function Index() {
           noteId={item}
           initialContent={contentCache.current.get(item) ?? ''}
           onChangeText={handleChangeText}
+          registerInputRef={registerInputRef}
           width={width}
           colors={itemColors}
           contentPaddingTop={contentPaddingTop}
           contentPaddingBottom={contentPaddingBottom}
+          isKeyboardVisible={isKeyboardVisible}
         />
       );
     },
-    [handleChangeText, width, contentPaddingTop, contentPaddingBottom],
+    [handleChangeText, registerInputRef, width, contentPaddingTop, contentPaddingBottom, isKeyboardVisible],
   );
 
   const keyExtractor = useCallback((item: string) => item, []);
@@ -319,14 +336,14 @@ export default function Index() {
             data={noteIds}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
-            extraData={themeVersion}
+            extraData={`${themeVersion}:${isKeyboardVisible}`}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            onScrollBeginDrag={() => {
-              suppressKeyboardRef.current = true;
-              Keyboard.dismiss();
-            }}
+            bounces={false}
+            overScrollMode="never"
+            keyboardDismissMode="none"
+            onTouchStart={handleTouchStart}
             onMomentumScrollEnd={handleMomentumScrollEnd}
             getItemLayout={getItemLayout}
             style={StyleSheet.absoluteFill}
@@ -367,7 +384,7 @@ const makeStyles = (colors: Colors) =>
   StyleSheet.create({
     outerContainer: {
       flex: 1,
-      backgroundColor: '#000',
+      backgroundColor: colors.background,
     },
     flex1: {
       flex: 1,
