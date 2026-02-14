@@ -1,6 +1,4 @@
-import type { ThemeMode } from './database';
-
-export type { ThemeMode };
+export type ThemeMode = 'paper' | 'forest' | 'ios' | 'dark' | 'cyberpunk';
 
 export type Colors = {
   background: string;

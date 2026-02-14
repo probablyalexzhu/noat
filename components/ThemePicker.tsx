@@ -7,8 +7,7 @@ import Animated, {
   withSpring,
   interpolate,
 } from 'react-native-reanimated';
-import { palettes, themeOrder } from '@/lib/theme';
-import type { ThemeMode } from '@/lib/database';
+import { palettes, themeOrder, type ThemeMode } from '@/lib/theme';
 
 const TRIGGER_SIZE = 48;
 const OPTION_SIZE = 40;

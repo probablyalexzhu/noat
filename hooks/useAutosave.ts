@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
-import { updateNoteContent } from '@/lib/database';
+import { updateNoteContent } from '@/lib/data/database';
 
 const AUTOSAVE_DELAY_MS = 300;
 

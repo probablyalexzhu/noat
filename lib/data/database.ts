@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import * as Crypto from 'expo-crypto';
+import type { ThemeMode } from '@/lib/theme';
 
 const db = SQLite.openDatabaseSync('notes.db');
 
@@ -136,8 +137,6 @@ export function getDeviceId(): string {
 export function getUserId(): string {
   return getOrCreateConfigValue('user_id');
 }
-
-export type ThemeMode = 'paper' | 'forest' | 'ios' | 'dark' | 'cyberpunk';
 
 const VALID_THEMES: ThemeMode[] = ['paper', 'forest', 'ios', 'dark', 'cyberpunk'];
 const DEFAULT_THEME: ThemeMode = 'dark';

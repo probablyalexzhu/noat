@@ -13,9 +13,8 @@ import {
   deleteNote,
   getNotesByCreationOrder,
   updateNoteTheme,
-  type ThemeMode,
-} from '@/lib/database';
-import { palettes, themeOrder, type Colors } from '@/lib/theme';
+} from '@/lib/data/database';
+import { palettes, themeOrder, type Colors, type ThemeMode } from '@/lib/theme';
 import NoteControls from '@/components/NoteControls';
 import NotePage from '@/components/NotePage';
 import { useAutosave } from '@/hooks/useAutosave';

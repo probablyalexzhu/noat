@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
-import { initDatabase } from '@/lib/database';
+import { initDatabase } from '@/lib/data/database';
 import { useEffect } from 'react';
-import { startAutoSync, stopAutoSync } from '@/lib/sync';
+import { startAutoSync, stopAutoSync } from '@/lib/data/sync';
 
 initDatabase();
 
