@@ -23,6 +23,7 @@ assets/       Static assets (images, icons)
 - **Lib** (`lib/`) contains pure utilities with no React dependencies (database, theme palettes, markdown styles).
 
 **Comment blocks for subtle interactions.** When code involves non-obvious coordination between multiple files or mechanisms (e.g., the keyboard/swipe interaction between `useKeyboardNavigation`, the FlatList, and `NotePage`), add a block comment explaining:
+
 - What problem it solves
 - How the pieces coordinate
 - Cross-references to related files

@@ -185,7 +185,14 @@ export default function Index() {
         />
       );
     },
-    [handleChangeText, registerInputRef, width, contentPaddingTop, contentPaddingBottom, isKeyboardVisible],
+    [
+      handleChangeText,
+      registerInputRef,
+      width,
+      contentPaddingTop,
+      contentPaddingBottom,
+      isKeyboardVisible,
+    ],
   );
 
   const keyExtractor = useCallback((item: string) => item, []);

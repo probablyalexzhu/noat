@@ -113,10 +113,11 @@ export function getNotesByCreationOrder(): Note[] {
 
 export function deleteNote(noteId: string) {
   const now = getCurrentTimestamp();
-  db.runSync(
-    `UPDATE notes SET deleted_at = ?, updated_at = ?, is_synced = 0 WHERE id = ?`,
-    [now, now, noteId],
-  );
+  db.runSync(`UPDATE notes SET deleted_at = ?, updated_at = ?, is_synced = 0 WHERE id = ?`, [
+    now,
+    now,
+    noteId,
+  ]);
 }
 
 export function updateNoteContent(noteId: string, content: string): void {
