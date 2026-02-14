@@ -10,7 +10,10 @@
       "Bash(npx expo install @expensify/react-native-live-markdown react-native-worklets@~0.7.0)",
       "Bash(npm ls:*)",
       "Bash(npx tsc:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git -C /Users/alexz/Documents/Projects/noat/noat log --oneline --all)",
+      "Bash(git -C /Users/alexz/Documents/Projects/noat/noat show 0598274 --stat)",
+      "Bash(npm run lint:*)"
     ]
   }
 }
