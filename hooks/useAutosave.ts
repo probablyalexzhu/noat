@@ -17,40 +17,51 @@ const AUTOSAVE_DELAY_MS = 300;
  *
  * `contentCache` and `latestContents` are exposed as refs because the parent
  * component reads/writes them during init, add, and delete operations.
+ *
+ * @param options.onNoteDirty - Optional callback invoked after note is saved to DB
  */
-export function useAutosave() {
+export function useAutosave(options?: { onNoteDirty?: (noteId: string) => void }) {
+  const { onNoteDirty } = options ?? {};
   const contentCache = useRef(new Map<string, string>());
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const latestContents = useRef(new Map<string, string>());
 
-  const handleChangeText = useCallback((noteId: string, text: string) => {
-    contentCache.current.set(noteId, text);
-    latestContents.current.set(noteId, text);
+  const handleChangeText = useCallback(
+    (noteId: string, text: string) => {
+      contentCache.current.set(noteId, text);
+      latestContents.current.set(noteId, text);
 
-    const existing = saveTimers.current.get(noteId);
-    if (existing) {
-      clearTimeout(existing);
-    }
-
-    const timer = setTimeout(() => {
-      updateNoteContent(noteId, text);
-      saveTimers.current.delete(noteId);
-    }, AUTOSAVE_DELAY_MS);
-
-    saveTimers.current.set(noteId, timer);
-  }, []);
-
-  const flushNote = useCallback((noteId: string) => {
-    const timer = saveTimers.current.get(noteId);
-    if (timer) {
-      clearTimeout(timer);
-      saveTimers.current.delete(noteId);
-      const text = latestContents.current.get(noteId);
-      if (text !== undefined) {
-        updateNoteContent(noteId, text);
+      const existing = saveTimers.current.get(noteId);
+      if (existing) {
+        clearTimeout(existing);
       }
-    }
-  }, []);
+
+      const timer = setTimeout(() => {
+        updateNoteContent(noteId, text);
+        saveTimers.current.delete(noteId);
+        onNoteDirty?.(noteId); // Notify
+      }, AUTOSAVE_DELAY_MS);
+
+      saveTimers.current.set(noteId, timer);
+    },
+    [onNoteDirty],
+  );
+
+  const flushNote = useCallback(
+    (noteId: string) => {
+      const timer = saveTimers.current.get(noteId);
+      if (timer) {
+        clearTimeout(timer);
+        saveTimers.current.delete(noteId);
+        const text = latestContents.current.get(noteId);
+        if (text !== undefined) {
+          updateNoteContent(noteId, text);
+          onNoteDirty?.(noteId); // Notify
+        }
+      }
+    },
+    [onNoteDirty],
+  );
 
   useEffect(() => {
     const flushAllPendingSaves = () => {
@@ -59,6 +70,7 @@ export function useAutosave() {
         const text = latestContents.current.get(noteId);
         if (text !== undefined) {
           updateNoteContent(noteId, text);
+          onNoteDirty?.(noteId); // Notify
         }
       }
       saveTimers.current.clear();
@@ -76,7 +88,7 @@ export function useAutosave() {
       sub.remove();
       flushAllPendingSaves();
     };
-  }, []);
+  }, [onNoteDirty]);
 
   return { contentCache, latestContents, handleChangeText, flushNote };
 }

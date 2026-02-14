@@ -1,60 +1,68 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { db, getUserId, getDeviceId } from './database';
+import type { RemoteNote, UpdatedAtResult, UpsertResult } from './types';
 
 /**
  * Upsert a remote note into local SQLite database.
  * Called when realtime subscription receives INSERT/UPDATE event.
  *
- * Returns note ID if successfully upserted, null if skipped.
+ * Returns UpsertResult indicating success or reason for failure.
  */
-export function upsertRemoteNote(remoteNote: any): string | null {
-  // Skip if this change came from current device (avoid feedback loop)
-  if (remoteNote.device_id === getDeviceId()) {
-    console.log(`[Realtime] Skipping own device change: ${remoteNote.id}`);
-    return null;
+export function upsertRemoteNote(remoteNote: RemoteNote): UpsertResult {
+  try {
+    // Skip if this change came from current device (avoid feedback loop)
+    if (remoteNote.device_id === getDeviceId()) {
+      return { success: false, reason: 'device_skip' };
+    }
+
+    // Check if local note is newer (conflict resolution)
+    const local = db.getFirstSync<UpdatedAtResult>('SELECT updated_at FROM notes WHERE id = ?', [
+      remoteNote.id,
+    ]);
+
+    if (local && local.updated_at >= remoteNote.updated_at) {
+      return { success: false, reason: 'stale_remote' };
+    }
+
+    // Upsert remote note into local DB (mark as synced)
+    const cols = Object.keys(remoteNote);
+    const placeholders = cols.map(() => '?').join(',');
+    const updates = cols.map((c) => `${c} = excluded.${c}`).join(',');
+
+    db.runSync(
+      `INSERT INTO notes (${cols.join(',')}, is_synced)
+       VALUES (${placeholders}, 1)
+       ON CONFLICT(id) DO UPDATE SET ${updates}, is_synced = 1`,
+      cols.map((c) => remoteNote[c as keyof RemoteNote]),
+    );
+
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    console.log(`[${time}] Realtime upserted: ${remoteNote.id}`);
+    return { success: true, noteId: remoteNote.id };
+  } catch (error) {
+    console.error('upsertRemoteNote failed:', error);
+    return {
+      success: false,
+      reason: 'db_error',
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
   }
-
-  // Check if local note is newer (conflict resolution)
-  const local: any = db.getFirstSync('SELECT updated_at FROM notes WHERE id = ?', [remoteNote.id]);
-
-  if (local && local.updated_at >= remoteNote.updated_at) {
-    console.log(`[Realtime] Local note is newer, skipping: ${remoteNote.id}`);
-    return null;
-  }
-
-  // Upsert remote note into local DB (mark as synced)
-  const cols = Object.keys(remoteNote);
-  const placeholders = cols.map(() => '?').join(',');
-  const updates = cols.map((c) => `${c} = excluded.${c}`).join(',');
-
-  db.runSync(
-    `INSERT INTO notes (${cols.join(',')}, is_synced)
-     VALUES (${placeholders}, 1)
-     ON CONFLICT(id) DO UPDATE SET ${updates}, is_synced = 1`,
-    cols.map((c) => remoteNote[c]),
-  );
-
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-  console.log(`[${time}] Realtime upserted: ${remoteNote.id}`);
-  return remoteNote.id;
 }
 
 /**
  * Subscribe to realtime changes for current user's notes.
  *
  * @param onNoteChanged - Callback called when remote note changes (INSERT/UPDATE/DELETE)
+ * @param onStatusChange - Optional callback for subscription status changes
  * @returns RealtimeChannel - Caller must unsubscribe on unmount
  */
 export function subscribeToNotes(
   onNoteChanged: (noteId: string, event: 'INSERT' | 'UPDATE' | 'DELETE') => void,
+  onStatusChange?: (status: string) => void,
 ): RealtimeChannel {
   const userId = getUserId();
-  const deviceId = getDeviceId();
   const channelName = `notes:${userId}`;
-
-  console.log(`[Realtime] Subscribing with user_id=${userId}, device_id (ours)=${deviceId}`);
-  console.log(`[Realtime] Filter: user_id=eq.${userId} (device_id filter temporarily disabled for testing)`);
 
   const channel = supabase
     .channel(channelName)
@@ -68,19 +76,22 @@ export function subscribeToNotes(
       },
       (payload) => {
         const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-        const noteId = (payload.new as any)?.id || (payload.old as any)?.id;
-        const remoteDeviceId = (payload.new as any)?.device_id || (payload.old as any)?.device_id;
+        const noteId = (payload.new as RemoteNote)?.id || (payload.old as Partial<RemoteNote>)?.id;
+        const remoteDeviceId =
+          (payload.new as RemoteNote)?.device_id || (payload.old as Partial<RemoteNote>)?.device_id;
         console.log(
           `[${time}] Realtime ${payload.eventType}: ${noteId} (from device: ${remoteDeviceId})`,
         );
 
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          const upsertedId = upsertRemoteNote(payload.new);
-          if (upsertedId) {
-            onNoteChanged(upsertedId, payload.eventType);
+          const result = upsertRemoteNote(payload.new as RemoteNote);
+          if (result.success) {
+            onNoteChanged(result.noteId, payload.eventType);
+          } else if (result.reason === 'db_error') {
+            console.error('Failed to apply remote change:', result.error);
           }
         } else if (payload.eventType === 'DELETE') {
-          const deletedId = (payload.old as any)?.id;
+          const deletedId = (payload.old as Partial<RemoteNote>)?.id;
           if (deletedId) {
             onNoteChanged(deletedId, 'DELETE');
           }
@@ -90,6 +101,7 @@ export function subscribeToNotes(
     .subscribe((status) => {
       const time = new Date().toLocaleTimeString('en-US', { hour12: false });
       console.log(`[${time}] Realtime subscription status: ${status}`);
+      onStatusChange?.(status);
     });
 
   return channel;

@@ -30,26 +30,16 @@ export default function Index() {
   const { width } = useWindowDimensions();
   const [noteIds, setNoteIds] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  // themeVersion is a cache-busting counter for FlatList's extraData.
+  // Incremented when notes change (content/theme) to force re-render of all items.
+  // The counter value is meaningless - only used to trigger shallow equality check.
   const [themeVersion, setThemeVersion] = useState(0);
   const noteThemes = useRef(new Map<string, ThemeMode>());
   const flatListRef = useRef<FlatList>(null);
 
-  const { contentCache, latestContents, handleChangeText, flushNote } = useAutosave();
-
-  const { isKeyboardVisible, registerInputRef, handleTouchStart, handleMomentumScrollEnd } =
-    useKeyboardNavigation({
-      width,
-      activeIndex,
-      noteIds,
-      onPageChange: setActiveIndex,
-      flushNote,
-    });
-
   // Handle remote changes from realtime sync
   const handleRemoteChange = useCallback(
     (noteId: string, event: 'INSERT' | 'UPDATE' | 'DELETE') => {
-      console.log(`[UI] Handling ${event} for note ${noteId}`);
-
       if (event === 'DELETE') {
         // Note was deleted remotely - remove from state
         setNoteIds((prev) => prev.filter((id) => id !== noteId));
@@ -64,7 +54,6 @@ export default function Index() {
 
       if (isNewNote) {
         // New note created remotely - full reload
-        console.log('New note detected, reloading all notes');
         const notes = getNotesByCreationOrder();
         const ids = notes.map((n) => n.id);
 
@@ -94,13 +83,6 @@ export default function Index() {
 
         // Apply remote changes immediately (remote wins)
         const content = note.content ?? '';
-        const oldContent = contentCache.current.get(note.id);
-
-        console.log(`[UI] Updating note ${note.id.slice(0, 8)}...`);
-        console.log(`  Old content: "${oldContent?.slice(0, 50)}..."`);
-        console.log(`  New content: "${content.slice(0, 50)}..."`);
-        console.log(`  Content changed: ${oldContent !== content}`);
-
         contentCache.current.set(note.id, content);
         latestContents.current.set(note.id, content);
 
@@ -110,7 +92,6 @@ export default function Index() {
         }
 
         // Trigger re-render
-        console.log(`[UI] Triggering FlatList re-render via themeVersion`);
         setThemeVersion((v) => v + 1);
       }
     },
@@ -118,9 +99,22 @@ export default function Index() {
   );
 
   // Setup realtime sync with remote change callback
-  useRealtimeSync({
+  const { handleNoteDirty } = useRealtimeSync({
     onRemoteChange: handleRemoteChange,
   });
+
+  const { contentCache, latestContents, handleChangeText, flushNote } = useAutosave({
+    onNoteDirty: handleNoteDirty,
+  });
+
+  const { isKeyboardVisible, registerInputRef, handleTouchStart, handleMomentumScrollEnd } =
+    useKeyboardNavigation({
+      width,
+      activeIndex,
+      noteIds,
+      onPageChange: setActiveIndex,
+      flushNote,
+    });
 
   useEffect(() => {
     const notes = getNotesByCreationOrder();
@@ -239,9 +233,10 @@ export default function Index() {
       if (!noteId) return;
       noteThemes.current.set(noteId, theme);
       updateNoteTheme(noteId, theme);
+      handleNoteDirty(noteId);
       setThemeVersion((v) => v + 1);
     },
-    [noteIds, activeIndex],
+    [noteIds, activeIndex, handleNoteDirty],
   );
 
   const renderItem = useCallback(
