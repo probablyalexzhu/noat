@@ -9,9 +9,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  createConversation,
-  deleteConversation,
-  getConversationsByCreationOrder,
+  createNote,
+  deleteNote,
+  getNotesByCreationOrder,
   updateNoteTheme,
   type ThemeMode,
 } from '@/lib/database';
@@ -46,27 +46,27 @@ export default function Index() {
     });
 
   useEffect(() => {
-    const convos = getConversationsByCreationOrder();
+    const notes = getNotesByCreationOrder();
 
-    if (convos.length > 0) {
-      const ids = convos.map((c) => c.id);
+    if (notes.length > 0) {
+      const ids = notes.map((n) => n.id);
 
-      convos.forEach((convo, index) => {
-        const content = convo.content ?? '';
-        contentCache.current.set(convo.id, content);
-        latestContents.current.set(convo.id, content);
+      notes.forEach((note, index) => {
+        const content = note.content ?? '';
+        contentCache.current.set(note.id, content);
+        latestContents.current.set(note.id, content);
 
-        const theme = getValidThemeOrAssignDefault(convo.theme, index);
-        noteThemes.current.set(convo.id, theme);
+        const theme = getValidThemeOrAssignDefault(note.theme, index);
+        noteThemes.current.set(note.id, theme);
 
-        if (!convo.theme || !themeOrder.includes(convo.theme as ThemeMode)) {
-          updateNoteTheme(convo.id, theme);
+        if (!note.theme || !themeOrder.includes(note.theme as ThemeMode)) {
+          updateNoteTheme(note.id, theme);
         }
       });
 
       setNoteIds(ids);
     } else {
-      const id = createConversation('Untitled', DEFAULT_THEME);
+      const id = createNote('Untitled', DEFAULT_THEME);
       contentCache.current.set(id, '');
       latestContents.current.set(id, '');
       noteThemes.current.set(id, DEFAULT_THEME);
@@ -105,7 +105,7 @@ export default function Index() {
     const currentThemeIndex = themeOrder.indexOf(currentTheme);
     const nextTheme = themeOrder[(currentThemeIndex + 1) % themeOrder.length];
 
-    const id = createConversation('Untitled', nextTheme);
+    const id = createNote('Untitled', nextTheme);
 
     contentCache.current.set(id, '');
     latestContents.current.set(id, '');
@@ -132,7 +132,7 @@ export default function Index() {
     }
 
     flushNote(noteId);
-    deleteConversation(noteId);
+    deleteNote(noteId);
 
     contentCache.current.delete(noteId);
     latestContents.current.delete(noteId);
@@ -141,7 +141,7 @@ export default function Index() {
     const remaining = noteIds.filter((id) => id !== noteId);
 
     if (remaining.length === 0) {
-      const newId = createConversation('Untitled', DEFAULT_THEME);
+      const newId = createNote('Untitled', DEFAULT_THEME);
       contentCache.current.set(newId, '');
       latestContents.current.set(newId, '');
       noteThemes.current.set(newId, DEFAULT_THEME);

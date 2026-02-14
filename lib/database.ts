@@ -3,14 +3,44 @@ import * as Crypto from 'expo-crypto';
 
 const db = SQLite.openDatabaseSync('notes.db');
 
+/**
+ * Renames the legacy `conversations` table to `notes` and `conversation_id` column
+ * to `note_id`. Each statement is wrapped in try/catch so it's idempotent — a no-op
+ * on fresh installs (table doesn't exist yet) or after already migrating.
+ */
+function migrateConversationsToNotes() {
+  try {
+    db.execSync(`ALTER TABLE conversations RENAME TO notes;`);
+  } catch {
+    // Table already renamed or doesn't exist (fresh install)
+  }
+  try {
+    db.execSync(`ALTER TABLE messages RENAME COLUMN conversation_id TO note_id;`);
+  } catch {
+    // Column already renamed or table doesn't exist yet
+  }
+  try {
+    db.execSync(`DROP INDEX IF EXISTS idx_messages_conversation;`);
+  } catch {
+    // Index already dropped
+  }
+  try {
+    db.execSync(`UPDATE sync_log SET table_name = 'notes' WHERE table_name = 'conversations';`);
+  } catch {
+    // sync_log doesn't exist yet (fresh install) or already updated
+  }
+}
+
 export function initDatabase() {
+  migrateConversationsToNotes();
+
   db.execSync(`
     CREATE TABLE IF NOT EXISTS app_config (
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS conversations (
+    CREATE TABLE IF NOT EXISTS notes (
       id          TEXT PRIMARY KEY,
       user_id     TEXT NOT NULL,
       title       TEXT DEFAULT 'Untitled',
@@ -23,7 +53,7 @@ export function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS messages (
       id              TEXT PRIMARY KEY,
-      conversation_id TEXT NOT NULL REFERENCES conversations(id),
+      note_id         TEXT NOT NULL REFERENCES notes(id),
       user_id         TEXT NOT NULL,
       content         TEXT NOT NULL,
       created_at      TEXT NOT NULL,
@@ -33,8 +63,8 @@ export function initDatabase() {
       device_id       TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_messages_conversation
-      ON messages(conversation_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_messages_note
+      ON messages(note_id, created_at);
 
     CREATE INDEX IF NOT EXISTS idx_messages_unsynced
       ON messages(is_synced) WHERE is_synced = 0;
@@ -63,14 +93,14 @@ function seedSyncLogIfEmpty() {
     );
     db.runSync(
       'INSERT INTO sync_log (table_name, last_synced_at, last_pushed_at) VALUES (?, ?, ?)',
-      ['conversations', initialTimestamp, initialTimestamp],
+      ['notes', initialTimestamp, initialTimestamp],
     );
   }
 }
 
 function addContentColumnIfNeeded() {
   try {
-    db.execSync(`ALTER TABLE conversations ADD COLUMN content TEXT DEFAULT '';`);
+    db.execSync(`ALTER TABLE notes ADD COLUMN content TEXT DEFAULT '';`);
   } catch {
     // Column already exists
   }
@@ -78,7 +108,7 @@ function addContentColumnIfNeeded() {
 
 function addThemeColumnIfNeeded() {
   try {
-    db.execSync(`ALTER TABLE conversations ADD COLUMN theme TEXT DEFAULT 'dark';`);
+    db.execSync(`ALTER TABLE notes ADD COLUMN theme TEXT DEFAULT 'dark';`);
   } catch {
     // Column already exists
   }
@@ -132,7 +162,7 @@ export function setTheme(mode: ThemeMode) {
   db.runSync('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)', ['theme', mode]);
 }
 
-export type Conversation = {
+export type Note = {
   id: string;
   user_id: string;
   title: string;
@@ -149,14 +179,14 @@ function getCurrentTimestamp(): string {
   return new Date().toISOString();
 }
 
-export function createConversation(title: string = 'Untitled', theme: ThemeMode = 'dark'): string {
+export function createNote(title: string = 'Untitled', theme: ThemeMode = 'dark'): string {
   const now = getCurrentTimestamp();
   const id = Crypto.randomUUID();
   const deviceId = getDeviceId();
   const userId = getUserId();
 
   db.runSync(
-    `INSERT INTO conversations (id, user_id, title, theme, created_at, updated_at, is_synced, device_id)
+    `INSERT INTO notes (id, user_id, title, theme, created_at, updated_at, is_synced, device_id)
      VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
     [id, userId, title, theme, now, now, deviceId],
   );
@@ -164,58 +194,58 @@ export function createConversation(title: string = 'Untitled', theme: ThemeMode 
   return id;
 }
 
-export function getConversations() {
+export function getNotes() {
   return db.getAllSync(
-    `SELECT * FROM conversations
+    `SELECT * FROM notes
      WHERE user_id = ? AND deleted_at IS NULL
      ORDER BY updated_at DESC`,
     [getUserId()],
   );
 }
 
-export function getConversationsByCreationOrder(): Conversation[] {
+export function getNotesByCreationOrder(): Note[] {
   return db.getAllSync(
-    `SELECT * FROM conversations
+    `SELECT * FROM notes
      WHERE user_id = ? AND deleted_at IS NULL
      ORDER BY created_at ASC`,
     [getUserId()],
-  ) as Conversation[];
+  ) as Note[];
 }
 
-export function deleteConversation(conversationId: string) {
+export function deleteNote(noteId: string) {
   const now = getCurrentTimestamp();
   db.runSync(
-    `UPDATE conversations SET deleted_at = ?, updated_at = ?, is_synced = 0 WHERE id = ?`,
-    [now, now, conversationId],
+    `UPDATE notes SET deleted_at = ?, updated_at = ?, is_synced = 0 WHERE id = ?`,
+    [now, now, noteId],
   );
 }
 
-export function createMessage(conversationId: string, content: string): string {
+export function createMessage(noteId: string, content: string): string {
   const now = getCurrentTimestamp();
   const id = Crypto.randomUUID();
   const deviceId = getDeviceId();
   const userId = getUserId();
 
   db.runSync(
-    `INSERT INTO messages (id, conversation_id, user_id, content, created_at, updated_at, is_synced, device_id)
+    `INSERT INTO messages (id, note_id, user_id, content, created_at, updated_at, is_synced, device_id)
      VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
-    [id, conversationId, userId, content, now, now, deviceId],
+    [id, noteId, userId, content, now, now, deviceId],
   );
 
-  db.runSync(`UPDATE conversations SET updated_at = ?, is_synced = 0 WHERE id = ?`, [
+  db.runSync(`UPDATE notes SET updated_at = ?, is_synced = 0 WHERE id = ?`, [
     now,
-    conversationId,
+    noteId,
   ]);
 
   return id;
 }
 
-export function getMessages(conversationId: string) {
+export function getMessages(noteId: string) {
   return db.getAllSync(
     `SELECT * FROM messages
-     WHERE conversation_id = ? AND deleted_at IS NULL
+     WHERE note_id = ? AND deleted_at IS NULL
      ORDER BY created_at ASC`,
-    [conversationId],
+    [noteId],
   );
 }
 
@@ -240,7 +270,7 @@ export function deleteMessage(messageId: string) {
 type ContentRow = { content: string };
 
 export function getNoteContent(noteId: string): string {
-  const row = db.getFirstSync('SELECT content FROM conversations WHERE id = ?', [
+  const row = db.getFirstSync('SELECT content FROM notes WHERE id = ?', [
     noteId,
   ]) as ContentRow | null;
   return row?.content ?? '';
@@ -248,7 +278,7 @@ export function getNoteContent(noteId: string): string {
 
 export function updateNoteContent(noteId: string, content: string): void {
   const now = getCurrentTimestamp();
-  db.runSync('UPDATE conversations SET content = ?, updated_at = ?, is_synced = 0 WHERE id = ?', [
+  db.runSync('UPDATE notes SET content = ?, updated_at = ?, is_synced = 0 WHERE id = ?', [
     content,
     now,
     noteId,
@@ -257,7 +287,7 @@ export function updateNoteContent(noteId: string, content: string): void {
 
 export function updateNoteTheme(noteId: string, theme: ThemeMode): void {
   const now = getCurrentTimestamp();
-  db.runSync('UPDATE conversations SET theme = ?, updated_at = ?, is_synced = 0 WHERE id = ?', [
+  db.runSync('UPDATE notes SET theme = ?, updated_at = ?, is_synced = 0 WHERE id = ?', [
     theme,
     now,
     noteId,
