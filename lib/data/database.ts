@@ -66,7 +66,7 @@ export function getDeviceId(): string {
   return getOrCreateConfigValue('device_id');
 }
 
-function getUserId(): string {
+export function getUserId(): string {
   return getOrCreateConfigValue('user_id');
 }
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { MarkdownTextInput, parseExpensiMark } from '@expensify/react-native-live-markdown';
 import type { Colors } from '@/lib/theme';
@@ -6,7 +6,7 @@ import { makeMarkdownStyle } from '@/lib/markdownStyles';
 
 type NotePageProps = {
   noteId: string;
-  initialContent: string;
+  content: string;
   onChangeText: (noteId: string, text: string) => void;
   registerInputRef: (noteId: string, ref: TextInput | null) => void;
   width: number;
@@ -30,7 +30,7 @@ type NotePageProps = {
  */
 function NotePage({
   noteId,
-  initialContent,
+  content: externalContent,
   onChangeText,
   registerInputRef,
   width,
@@ -39,9 +39,14 @@ function NotePage({
   contentPaddingBottom,
   isKeyboardVisible,
 }: NotePageProps) {
-  const [content, setContent] = useState(initialContent);
+  const [content, setContent] = useState(externalContent);
   const markdownStyle = makeMarkdownStyle(colors);
   const localInputRef = useRef<TextInput | null>(null);
+
+  // Sync internal state when external content changes (e.g., remote updates)
+  useEffect(() => {
+    setContent(externalContent);
+  }, [externalContent]);
 
   const inputRefCallback = useCallback(
     (ref: TextInput | null) => {

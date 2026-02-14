@@ -19,6 +19,7 @@ import NoteControls from '@/components/NoteControls';
 import NotePage from '@/components/NotePage';
 import { useAutosave } from '@/hooks/useAutosave';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
+import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 
 const SCROLL_ANIMATION_DELAY_MS = 50;
 const DOT_INDICATOR_HEIGHT = 23;
@@ -43,6 +44,83 @@ export default function Index() {
       onPageChange: setActiveIndex,
       flushNote,
     });
+
+  // Handle remote changes from realtime sync
+  const handleRemoteChange = useCallback(
+    (noteId: string, event: 'INSERT' | 'UPDATE' | 'DELETE') => {
+      console.log(`[UI] Handling ${event} for note ${noteId}`);
+
+      if (event === 'DELETE') {
+        // Note was deleted remotely - remove from state
+        setNoteIds((prev) => prev.filter((id) => id !== noteId));
+        contentCache.current.delete(noteId);
+        latestContents.current.delete(noteId);
+        noteThemes.current.delete(noteId);
+        return;
+      }
+
+      // INSERT or UPDATE
+      const isNewNote = !noteIds.includes(noteId);
+
+      if (isNewNote) {
+        // New note created remotely - full reload
+        console.log('New note detected, reloading all notes');
+        const notes = getNotesByCreationOrder();
+        const ids = notes.map((n) => n.id);
+
+        notes.forEach((note, index) => {
+          const content = note.content ?? '';
+          contentCache.current.set(note.id, content);
+          latestContents.current.set(note.id, content);
+
+          const theme = getValidThemeOrAssignDefault(note.theme, index);
+          noteThemes.current.set(note.id, theme);
+        });
+
+        setNoteIds(ids);
+      } else {
+        // Existing note updated - selective reload
+        const notes = getNotesByCreationOrder();
+        const note = notes.find((n) => n.id === noteId);
+
+        if (!note) {
+          // Note might have been soft-deleted
+          setNoteIds((prev) => prev.filter((id) => id !== noteId));
+          contentCache.current.delete(noteId);
+          latestContents.current.delete(noteId);
+          noteThemes.current.delete(noteId);
+          return;
+        }
+
+        // Apply remote changes immediately (remote wins)
+        const content = note.content ?? '';
+        const oldContent = contentCache.current.get(note.id);
+
+        console.log(`[UI] Updating note ${note.id.slice(0, 8)}...`);
+        console.log(`  Old content: "${oldContent?.slice(0, 50)}..."`);
+        console.log(`  New content: "${content.slice(0, 50)}..."`);
+        console.log(`  Content changed: ${oldContent !== content}`);
+
+        contentCache.current.set(note.id, content);
+        latestContents.current.set(note.id, content);
+
+        const theme = note.theme as ThemeMode;
+        if (theme && themeOrder.includes(theme)) {
+          noteThemes.current.set(note.id, theme);
+        }
+
+        // Trigger re-render
+        console.log(`[UI] Triggering FlatList re-render via themeVersion`);
+        setThemeVersion((v) => v + 1);
+      }
+    },
+    [noteIds],
+  );
+
+  // Setup realtime sync with remote change callback
+  useRealtimeSync({
+    onRemoteChange: handleRemoteChange,
+  });
 
   useEffect(() => {
     const notes = getNotesByCreationOrder();
@@ -174,7 +252,7 @@ export default function Index() {
       return (
         <NotePage
           noteId={item}
-          initialContent={contentCache.current.get(item) ?? ''}
+          content={contentCache.current.get(item) ?? ''}
           onChangeText={handleChangeText}
           registerInputRef={registerInputRef}
           width={width}
