@@ -33,3 +33,21 @@ export async function push() {
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
   console.log(`[${time}] Pushed ${rows.length} notes`);
 }
+
+// ============================================
+// CLEANUP — Remove old soft-deleted notes
+// ============================================
+export async function cleanupOldDeletedNotesRemote(daysOld: number = 7): Promise<void> {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - daysOld);
+
+  const { error } = await supabase
+    .from('notes')
+    .delete()
+    .not('deleted_at', 'is', null)
+    .lt('deleted_at', cutoff.toISOString());
+
+  if (error) {
+    console.error('Failed to cleanup remote deleted notes:', error);
+  }
+}

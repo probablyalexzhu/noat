@@ -138,4 +138,13 @@ export function updateNoteTheme(noteId: string, theme: ThemeMode): void {
   ]);
 }
 
+export function cleanupOldDeletedNotes(daysOld: number = 7): void {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - daysOld);
+
+  db.runSync('DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?', [
+    cutoff.toISOString(),
+  ]);
+}
+
 export { db };

@@ -9,11 +9,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  cleanupOldDeletedNotes,
   createNote,
   deleteNote,
   getNotesByCreationOrder,
   updateNoteTheme,
 } from '@/lib/data/database';
+import { cleanupOldDeletedNotesRemote } from '@/lib/data/sync';
 import { palettes, themeOrder, type Colors, type ThemeMode } from '@/lib/theme';
 import NoteControls from '@/components/NoteControls';
 import NotePage from '@/components/NotePage';
@@ -117,6 +119,10 @@ export default function Index() {
     });
 
   useEffect(() => {
+    // Cleanup old deleted notes (local + cloud)
+    cleanupOldDeletedNotes(7);
+    cleanupOldDeletedNotesRemote(7).catch(console.error);
+
     const notes = getNotesByCreationOrder();
 
     if (notes.length > 0) {
