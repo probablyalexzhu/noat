@@ -2,7 +2,7 @@
 
 ## Project overview
 
-Noat is a minimalist note-taking app built with React Native (Expo). Notes are stored locally in SQLite via expo-sqlite. The app supports multiple notes (swipeable via FlatList), per-note color themes, markdown editing, and debounced autosave.
+Noat is a minimalist note-taking app built with React Native (Expo). Notes are stored locally in SQLite via expo-sqlite and realtime cloud sync via Supabase Realtime. The app supports multiple notes (swipeable via FlatList), per-note color themes, markdown editing, and debounced autosave.
 
 ## Directory layout
 
@@ -30,13 +30,19 @@ assets/       Static assets (images, icons)
 
 Don't add comments for self-explanatory code. Only comment the "why", not the "what".
 
-## Code style
+## Code Style
 
 - TypeScript with `strict: true`
 - Prettier: single quotes, trailing commas, 100 char line width, 2-space indent
 - ESLint: expo config + prettier plugin
 - Run `npm run lint` to check and `npm run format` to auto-format
 - Path alias `@/*` maps to the project root
+
+## Bug Fixing Guidelines
+
+When fixing UI bugs (especially keyboard/focus/animation issues), try the simplest possible approach first. Do NOT layer complex workarounds (pointerEvents manipulation, delayed refs, event suppression hacks). If the first simple fix doesn't work, step back and question the overall approach before adding complexity.
+
+When a fix introduces a regression (text disappearing, animations breaking, layout shifting), immediately revert the change rather than trying to patch the regression on top of it. Propose a cleaner alternative approach.
 
 ## Commands
 

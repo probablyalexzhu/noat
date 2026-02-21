@@ -63,10 +63,11 @@ function NotePage({
 
   return (
     <ScrollView
-      style={[styles.scrollView, { width, backgroundColor: colors.background }]}
+      style={[styles.scrollView, { backgroundColor: colors.background }]}
       contentContainerStyle={[
         styles.contentContainer,
         {
+          width,
           paddingTop: contentPaddingTop,
           paddingBottom: contentPaddingBottom,
         },

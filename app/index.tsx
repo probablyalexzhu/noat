@@ -23,7 +23,6 @@ import { useAutosave } from '@/hooks/useAutosave';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 
-const SCROLL_ANIMATION_DELAY_MS = 50;
 const DOT_INDICATOR_HEIGHT = 23;
 const BOTTOM_BAR_HEIGHT = 54;
 const DEFAULT_THEME: ThemeMode = 'paper';
@@ -157,6 +156,18 @@ export default function Index() {
   const activeTheme = getThemeForNote(activeNoteId);
   const activeColors = palettes[activeTheme];
 
+  // Scroll to active index when it changes
+  useEffect(() => {
+    if (activeIndex >= 0 && activeIndex < noteIds.length) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToIndex({
+          index: activeIndex,
+          animated: true,
+        });
+      }, 100);
+    }
+  }, [activeIndex, noteIds.length]);
+
   const contentPaddingTop = insets.top + DOT_INDICATOR_HEIGHT;
   const contentPaddingBottom = insets.bottom + BOTTOM_BAR_HEIGHT;
 
@@ -191,13 +202,7 @@ export default function Index() {
     setThemeVersion((v) => v + 1);
     setNoteIds((prev) => {
       const next = [...prev, id];
-
-      setTimeout(() => {
-        const lastIndex = next.length - 1;
-        flatListRef.current?.scrollToIndex({ index: lastIndex, animated: true });
-        setActiveIndex(lastIndex);
-      }, SCROLL_ANIMATION_DELAY_MS);
-
+      setActiveIndex(next.length - 1);
       return next;
     });
   }, [noteIds, activeIndex]);
@@ -249,11 +254,12 @@ export default function Index() {
     ({ item }: { item: string }) => {
       const itemTheme = getThemeForNote(item);
       const itemColors = palettes[itemTheme];
+      const cachedContent = contentCache.current.get(item);
 
       return (
         <NotePage
           noteId={item}
-          content={contentCache.current.get(item) ?? ''}
+          content={cachedContent ?? ''}
           onChangeText={handleChangeText}
           registerInputRef={registerInputRef}
           width={width}
@@ -300,6 +306,7 @@ export default function Index() {
       >
         <View style={styles.flex1}>
           <FlatList
+            key={`flatlist-${noteIds.length}`}
             ref={flatListRef}
             data={noteIds}
             renderItem={renderItem}
