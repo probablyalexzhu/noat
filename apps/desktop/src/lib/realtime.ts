@@ -1,6 +1,6 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@noat/sync';
-import { db, getUserId, getDeviceId } from './database';
+import { db, getUserId } from './database';
 import type { RemoteNote, UpdatedAtResult, UpsertResult } from '@noat/sync';
 
 /**
@@ -12,10 +12,11 @@ import type { RemoteNote, UpdatedAtResult, UpsertResult } from '@noat/sync';
 export async function upsertRemoteNote(remoteNote: RemoteNote): Promise<UpsertResult> {
   try {
     // Skip if this change came from current device (avoid feedback loop)
-    const deviceId = await getDeviceId();
-    if (remoteNote.device_id === deviceId) {
-      return { success: false, reason: 'device_skip' };
-    }
+    // Disabled for testing - allow all remote changes
+    // const deviceId = await getDeviceId();
+    // if (remoteNote.device_id === deviceId) {
+    //   return { success: false, reason: 'device_skip' };
+    // }
 
     // Check if local note is newer (conflict resolution)
     const localRows = await db.select<UpdatedAtResult[]>(
@@ -87,15 +88,23 @@ export async function subscribeToNotes(
         );
 
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          console.log(`[${time}] Processing ${payload.eventType} for note ${noteId}`);
           const result = await upsertRemoteNote(payload.new as RemoteNote);
+          console.log(`[${time}] Upsert result for ${noteId}:`, result);
           if (result.success) {
+            console.log(
+              `[${time}] Calling onNoteChanged callback with noteId=${result.noteId}, event=${payload.eventType}`,
+            );
             onNoteChanged(result.noteId, payload.eventType);
           } else if (result.reason === 'db_error') {
             console.error('Failed to apply remote change:', result.error);
+          } else {
+            console.log(`[${time}] Skipped update: ${result.reason}`);
           }
         } else if (payload.eventType === 'DELETE') {
           const deletedId = (payload.old as Partial<RemoteNote>)?.id;
           if (deletedId) {
+            console.log(`[${time}] Calling onNoteChanged callback with noteId=${deletedId}, event=DELETE`);
             onNoteChanged(deletedId, 'DELETE');
           }
         }

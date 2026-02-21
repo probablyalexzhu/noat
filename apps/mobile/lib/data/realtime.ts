@@ -12,9 +12,10 @@ import type { RemoteNote, UpdatedAtResult, UpsertResult } from '@noat/sync';
 export function upsertRemoteNote(remoteNote: RemoteNote): UpsertResult {
   try {
     // Skip if this change came from current device (avoid feedback loop)
-    if (remoteNote.device_id === getDeviceId()) {
-      return { success: false, reason: 'device_skip' };
-    }
+    // Disabled for testing - allow all remote changes
+    // if (remoteNote.device_id === getDeviceId()) {
+    //   return { success: false, reason: 'device_skip' };
+    // }
 
     // Check if local note is newer (conflict resolution)
     const local = db.getFirstSync<UpdatedAtResult>('SELECT updated_at FROM notes WHERE id = ?', [
