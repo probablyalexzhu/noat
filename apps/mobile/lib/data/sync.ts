@@ -1,6 +1,6 @@
 // sync.ts
 import { db, getDeviceId } from './database';
-import { supabase } from './supabase';
+import { supabase } from '@noat/sync';
 
 // ============================================
 // PUSH — Send unsynced notes to Supabase

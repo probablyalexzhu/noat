@@ -1,7 +1,7 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+import { supabase } from '@noat/sync';
 import { db, getUserId, getDeviceId } from './database';
-import type { RemoteNote, UpdatedAtResult, UpsertResult } from './types';
+import type { RemoteNote, UpdatedAtResult, UpsertResult } from '@noat/sync';
 
 /**
  * Upsert a remote note into local SQLite database.

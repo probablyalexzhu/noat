@@ -2,12 +2,18 @@
 
 # dependencies
 node_modules/
+apps/*/node_modules/
+packages/*/node_modules/
 
-# Expo
-.expo/
-dist/
-web-build/
-expo-env.d.ts
+# Expo (mobile)
+apps/mobile/.expo/
+apps/mobile/expo-env.d.ts
+apps/mobile/web-build/
+
+# dist
+apps/mobile/dist/
+apps/desktop/dist/
+packages/*/dist/
 
 # Native
 .kotlin/
@@ -17,6 +23,9 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+
+# Tauri (desktop)
+apps/desktop/src-tauri/target/
 
 # Metro
 .metro-health-check*
@@ -39,5 +48,5 @@ yarn-error.*
 app-example
 
 # generated native folders
-/ios
-/android
+apps/mobile/ios/
+apps/mobile/android/

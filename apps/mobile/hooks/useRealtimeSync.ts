@@ -1,10 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { AppState } from 'react-native';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { db } from '@/lib/data/database';
 import { push } from '@/lib/data/sync';
 import { subscribeToNotes } from '@/lib/data/realtime';
-import type { CountResult } from '@/lib/data/types';
 
 const PUSH_DEBOUNCE_MS = 1500;
 
