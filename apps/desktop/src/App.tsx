@@ -1,107 +1,336 @@
-import { useEffect, useState } from 'react';
-import { initDatabase, createNote, getNotesByCreationOrder } from './lib/database';
-import { subscribeToNotes } from './lib/realtime';
-import { push } from './lib/sync';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-import './App.css';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  cleanupOldDeletedNotes,
+  createNote,
+  deleteNote,
+  getNotesByCreationOrder,
+  initDatabase,
+  updateNoteTheme,
+} from '@/lib/database';
+import { cleanupOldDeletedNotesRemote } from '@/lib/sync';
+import { palettes, themeOrder, type ThemeMode } from '@/lib/theme';
+import NoteControls from '@/components/NoteControls';
+import NotePage from '@/components/NotePage';
+import { useAutosave } from '@/hooks/useAutosave';
+import { useRealtimeSync } from '@/hooks/useRealtimeSync';
+import '@/App.css';
 
-function App() {
-  const [status, setStatus] = useState('Initializing...');
-  const [notes, setNotes] = useState<string[]>([]);
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
+const DEFAULT_THEME: ThemeMode = 'paper';
 
+export default function App() {
+  const [noteIds, setNoteIds] = useState<string[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [width, setWidth] = useState(window.innerWidth);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  const noteThemes = useRef(new Map<string, ThemeMode>());
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Handle remote changes from realtime sync
+  const handleRemoteChange = useCallback(
+    async (noteId: string, event: 'INSERT' | 'UPDATE' | 'DELETE') => {
+      if (event === 'DELETE') {
+        // Note was deleted remotely - remove from state
+        setNoteIds((prev) => prev.filter((id) => id !== noteId));
+        contentCache.current.delete(noteId);
+        latestContents.current.delete(noteId);
+        noteThemes.current.delete(noteId);
+        return;
+      }
+
+      // INSERT or UPDATE
+      const isNewNote = !noteIds.includes(noteId);
+
+      if (isNewNote) {
+        // New note created remotely - full reload
+        const notes = await getNotesByCreationOrder();
+        const ids = notes.map((n) => n.id);
+
+        notes.forEach((note, index) => {
+          const content = note.content ?? '';
+          contentCache.current.set(note.id, content);
+          latestContents.current.set(note.id, content);
+
+          const theme = getValidThemeOrAssignDefault(note.theme, index);
+          noteThemes.current.set(note.id, theme);
+        });
+
+        setNoteIds(ids);
+      } else {
+        // Existing note updated - selective reload
+        const notes = await getNotesByCreationOrder();
+        const note = notes.find((n) => n.id === noteId);
+
+        if (!note) {
+          // Note might have been soft-deleted
+          setNoteIds((prev) => prev.filter((id) => id !== noteId));
+          contentCache.current.delete(noteId);
+          latestContents.current.delete(noteId);
+          noteThemes.current.delete(noteId);
+          return;
+        }
+
+        // Apply remote changes immediately (remote wins)
+        const content = note.content ?? '';
+        contentCache.current.set(note.id, content);
+        latestContents.current.set(note.id, content);
+
+        const theme = note.theme as ThemeMode;
+        if (theme && themeOrder.includes(theme)) {
+          noteThemes.current.set(note.id, theme);
+        }
+
+        // Trigger re-render
+      }
+    },
+    [noteIds],
+  );
+
+  // Setup realtime sync with remote change callback
+  const { handleNoteDirty } = useRealtimeSync({
+    onRemoteChange: handleRemoteChange,
+  });
+
+  const { contentCache, latestContents, handleChangeText, flushNote } = useAutosave({
+    onNoteDirty: handleNoteDirty,
+  });
+
+  // Initialize database and load notes
   useEffect(() => {
     const init = async () => {
       try {
-        // Initialize database
         await initDatabase();
-        setStatus('Loading notes...');
 
-        // Load existing notes
-        const existingNotes = await getNotesByCreationOrder();
-        setNotes(existingNotes.map((n) => n.id));
-        setStatus(`Ready (${existingNotes.length} notes)`);
+        // Cleanup old deleted notes (local + cloud)
+        await cleanupOldDeletedNotes(7);
+        await cleanupOldDeletedNotesRemote(7).catch(console.error);
 
-        // Subscribe to realtime changes
-        const ch = await subscribeToNotes(
-          (noteId, event) => {
-            console.log(`Note ${event}: ${noteId}`);
-            loadNotes();
-          },
-          (status) => {
-            setStatus(`Realtime: ${status}`);
-          },
-        );
-        setChannel(ch);
+        const notes = await getNotesByCreationOrder();
+
+        if (notes.length > 0) {
+          const ids = notes.map((n) => n.id);
+
+          notes.forEach((note, index) => {
+            const content = note.content ?? '';
+            contentCache.current.set(note.id, content);
+            latestContents.current.set(note.id, content);
+
+            const theme = getValidThemeOrAssignDefault(note.theme, index);
+            noteThemes.current.set(note.id, theme);
+
+            if (!note.theme || !themeOrder.includes(note.theme as ThemeMode)) {
+              updateNoteTheme(note.id, theme);
+            }
+          });
+
+          setNoteIds(ids);
+        } else {
+          const id = await createNote('Untitled', DEFAULT_THEME);
+          contentCache.current.set(id, '');
+          latestContents.current.set(id, '');
+          noteThemes.current.set(id, DEFAULT_THEME);
+          setNoteIds([id]);
+        }
+
+        setIsInitialized(true);
       } catch (error) {
         console.error('Initialization failed:', error);
-        setStatus(`Error: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
 
     init();
-
-    // Cleanup on unmount
-    return () => {
-      if (channel) {
-        channel.unsubscribe();
-      }
-    };
   }, []);
 
-  const loadNotes = async () => {
-    try {
-      const existingNotes = await getNotesByCreationOrder();
-      setNotes(existingNotes.map((n) => n.id));
-    } catch (error) {
-      console.error('Failed to load notes:', error);
+  // Listen to window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setWidth(window.innerWidth);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Scroll to active index when it changes
+  useEffect(() => {
+    if (!scrollRef.current || activeIndex < 0 || activeIndex >= noteIds.length) {
+      return;
     }
-  };
 
-  const handleCreateTestNote = async () => {
-    try {
-      setStatus('Creating test note...');
-      const noteId = await createNote('Test Note', 'dark');
-      console.log(`Created note: ${noteId}`);
+    setTimeout(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTo({
+          left: activeIndex * width,
+          behavior: 'smooth',
+        });
+      }
+    }, 100);
+  }, [activeIndex, noteIds.length, width]);
 
-      setStatus('Pushing to Supabase...');
-      await push();
-
-      await loadNotes();
-      setStatus(`Ready (${notes.length + 1} notes)`);
-    } catch (error) {
-      console.error('Failed to create note:', error);
-      setStatus(`Error: ${error instanceof Error ? error.message : String(error)}`);
+  function getValidThemeOrAssignDefault(
+    themeValue: string | null,
+    fallbackIndex: number,
+  ): ThemeMode {
+    if (themeValue && themeOrder.includes(themeValue as ThemeMode)) {
+      return themeValue as ThemeMode;
     }
-  };
+    return themeOrder[fallbackIndex % themeOrder.length];
+  }
+
+  function getThemeForNote(noteId: string | undefined): ThemeMode {
+    if (!noteId) {
+      return DEFAULT_THEME;
+    }
+    return noteThemes.current.get(noteId) ?? DEFAULT_THEME;
+  }
+
+  const activeNoteId = noteIds[activeIndex];
+  const activeTheme = getThemeForNote(activeNoteId);
+  const activeColors = palettes[activeTheme];
+
+  const handleAddNote = useCallback(async () => {
+    const currentTheme = getThemeForNote(noteIds[activeIndex]);
+    const currentThemeIndex = themeOrder.indexOf(currentTheme);
+    const nextTheme = themeOrder[(currentThemeIndex + 1) % themeOrder.length];
+
+    const id = await createNote('Untitled', nextTheme);
+
+    contentCache.current.set(id, '');
+    latestContents.current.set(id, '');
+    noteThemes.current.set(id, nextTheme);
+
+    setNoteIds((prev) => {
+      const next = [...prev, id];
+      setActiveIndex(next.length - 1);
+      return next;
+    });
+  }, [noteIds, activeIndex]);
+
+  const handleDeleteNote = useCallback(async () => {
+    const noteId = noteIds[activeIndex];
+    if (!noteId) {
+      return;
+    }
+
+    flushNote(noteId);
+    await deleteNote(noteId);
+
+    contentCache.current.delete(noteId);
+    latestContents.current.delete(noteId);
+    noteThemes.current.delete(noteId);
+
+    const remaining = noteIds.filter((id) => id !== noteId);
+
+    if (remaining.length === 0) {
+      const newId = await createNote('Untitled', DEFAULT_THEME);
+      contentCache.current.set(newId, '');
+      latestContents.current.set(newId, '');
+      noteThemes.current.set(newId, DEFAULT_THEME);
+      setNoteIds([newId]);
+      setActiveIndex(0);
+    } else {
+      const newIndex = activeIndex >= remaining.length ? remaining.length - 1 : activeIndex;
+      setNoteIds(remaining);
+      setActiveIndex(newIndex);
+    }
+  }, [noteIds, activeIndex, flushNote]);
+
+  const handleThemeChange = useCallback(
+    async (theme: ThemeMode) => {
+      const noteId = noteIds[activeIndex];
+      if (!noteId) return;
+      noteThemes.current.set(noteId, theme);
+      await updateNoteTheme(noteId, theme);
+      handleNoteDirty(noteId);
+    },
+    [noteIds, activeIndex, handleNoteDirty],
+  );
+
+  // Handle scroll detection to update active index
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+
+    const scrollLeft = scrollRef.current.scrollLeft;
+    const newIndex = Math.round(scrollLeft / width);
+
+    if (newIndex !== activeIndex && newIndex >= 0 && newIndex < noteIds.length) {
+      flushNote(noteIds[activeIndex]);
+      setActiveIndex(newIndex);
+    }
+  }, [width, activeIndex, noteIds, flushNote]);
+
+  const dotColors = noteIds.map((id) => {
+    const theme = getThemeForNote(id);
+    return palettes[theme].accent;
+  });
+
+  if (!isInitialized) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: activeColors.background,
+          color: activeColors.text,
+        }}
+      >
+        Initializing...
+      </div>
+    );
+  }
 
   return (
-    <main className="container">
-      <h1>Noat Desktop</h1>
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        backgroundColor: activeColors.background,
+        position: 'relative',
+      }}
+    >
+      <div
+        ref={scrollRef}
+        style={{
+          display: 'flex',
+          overflowX: 'auto',
+          scrollSnapType: 'x mandatory',
+          scrollBehavior: 'smooth',
+          height: '100%',
+          width: '100%',
+          scrollbarWidth: 'none',
+        }}
+        onScroll={handleScroll}
+      >
+        {noteIds.map((id) => {
+          const itemTheme = getThemeForNote(id);
+          const itemColors = palettes[itemTheme];
+          const cachedContent = contentCache.current.get(id);
 
-      <div className="status-panel">
-        <p>
-          <strong>Status:</strong> {status}
-        </p>
-        <p>
-          <strong>Notes:</strong> {notes.length}
-        </p>
+          return (
+            <NotePage
+              key={id}
+              noteId={id}
+              content={cachedContent ?? ''}
+              onChangeText={handleChangeText}
+              width={width}
+              colors={itemColors}
+            />
+          );
+        })}
       </div>
 
-      <button onClick={handleCreateTestNote}>Create Test Note</button>
-
-      {notes.length > 0 && (
-        <div className="notes-list">
-          <h3>Local Notes:</h3>
-          <ul>
-            {notes.map((id) => (
-              <li key={id}>{id.substring(0, 8)}...</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </main>
+      <NoteControls
+        dotColors={dotColors}
+        activeIndex={activeIndex}
+        activeTheme={activeTheme}
+        activeColors={activeColors}
+        onDeleteNote={handleDeleteNote}
+        onAddNote={handleAddNote}
+        onThemeChange={handleThemeChange}
+      />
+    </div>
   );
 }
-
-export default App;
