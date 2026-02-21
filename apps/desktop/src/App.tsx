@@ -295,8 +295,20 @@ export default function App() {
         height: '100%',
         backgroundColor: activeColors.background,
         position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        borderRadius: '16px',
+        overflow: 'hidden',
       }}
     >
+      <div
+        data-tauri-drag-region
+        style={{
+          height: '24px',
+          userSelect: 'none',
+          flexShrink: 0,
+        }}
+      />
       <div
         ref={scrollRef}
         style={{
@@ -304,7 +316,7 @@ export default function App() {
           overflowX: 'auto',
           scrollSnapType: 'x mandatory',
           scrollBehavior: 'smooth',
-          height: '100%',
+          flex: 1,
           width: '100%',
           scrollbarWidth: 'none',
         }}
