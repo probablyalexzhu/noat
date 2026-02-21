@@ -2,7 +2,11 @@
   "name": "noat-monorepo",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["apps/mobile", "packages/sync"],
+  "workspaces": [
+    "apps/mobile",
+    "apps/desktop",
+    "packages/sync"
+  ],
   "scripts": {
     "mobile": "npm run start --workspace=apps/mobile",
     "desktop": "npm run dev --workspace=apps/desktop",
