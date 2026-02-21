@@ -7,7 +7,7 @@ import {
   initDatabase,
   updateNoteTheme,
 } from '@/lib/database';
-import { cleanupOldDeletedNotesRemote } from '@/lib/sync';
+import { cleanupOldDeletedNotesRemote, pull } from '@/lib/sync';
 import { palettes, themeOrder, type ThemeMode } from '@/lib/theme';
 import NoteControls from '@/components/NoteControls';
 import NotePage from '@/components/NotePage';
@@ -103,6 +103,10 @@ export default function App() {
       try {
         await initDatabase();
 
+        // Pull pre-existing notes from Supabase
+        await pull();
+
+        
         // Cleanup old deleted notes (local + cloud)
         await cleanupOldDeletedNotes(7);
         await cleanupOldDeletedNotesRemote(7).catch(console.error);

@@ -162,16 +162,21 @@ export function useRealtimeSync(options?: {
     const time = new Date().toLocaleTimeString('en-US', { hour12: false });
     console.log(`[${time}] useRealtimeSync: useEffect running, setting up realtime sync`);
 
-    // Setup realtime subscription (only once on mount)
-    setupRealtime().catch((error) => {
-      console.error(
-        `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] setupRealtime error:`,
-        error,
-      );
-    });
+    // Small delay to ensure Supabase client is fully initialized
+    const timer = setTimeout(() => {
+      // Setup realtime subscription (only once on mount)
+      setupRealtime().catch((error) => {
+        console.error(
+          `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] setupRealtime error:`,
+          error,
+        );
+      });
 
-    // Initial push on mount
-    triggerPush();
+      // Initial push on mount
+      triggerPush();
+    }, 500);
+
+    return () => clearTimeout(timer);
 
     // Cleanup
     return () => {
