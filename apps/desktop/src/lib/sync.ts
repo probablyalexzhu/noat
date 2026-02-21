@@ -1,5 +1,5 @@
 // sync.ts
-import { db, getDeviceId } from './database';
+import { db } from './database';
 import { supabase } from '@noat/sync';
 
 // ============================================
