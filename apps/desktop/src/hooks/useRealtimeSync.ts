@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { push } from '@/lib/sync';
 import { subscribeToNotes } from '@/lib/realtime';
+import { db } from '@/lib/database';
 
 const PUSH_DEBOUNCE_MS = 1500;
 
@@ -106,39 +107,77 @@ export function useRealtimeSync(options?: {
 
   // Setup realtime subscription (stable, doesn't depend on callback)
   const setupRealtime = useCallback(async () => {
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    console.log(`[${time}] setupRealtime: Starting subscription setup`);
+
+    // Wait for database to be initialized (max 5 seconds)
+    let attempts = 0;
+    while (!db || attempts > 50) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      attempts++;
+    }
+
+    if (!db) {
+      console.error(`[${time}] setupRealtime: Database failed to initialize after timeout`);
+      return;
+    }
+
+    console.log(`[${time}] setupRealtime: Database is ready, proceeding with subscription`);
+
     // Cleanup existing subscription
     if (realtimeChannelRef.current) {
+      console.log(`[${time}] setupRealtime: Unsubscribing from existing channel`);
       realtimeChannelRef.current.unsubscribe();
       realtimeChannelRef.current = null;
     }
 
     // Subscribe to realtime changes
     if (onRemoteChangeRef.current) {
+      console.log(`[${time}] setupRealtime: Subscribing to notes`);
       const channel = await subscribeToNotes(
         (noteId, event) => {
           // Use ref to always call latest callback without recreating subscription
+          console.log(
+            `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] setupRealtime: Callback wrapper called with noteId=${noteId}, event=${event}`,
+          );
           onRemoteChangeRef.current?.(noteId, event);
         },
         (status) => {
+          const msg = `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] Subscription status: ${status}`;
+          console.log(msg);
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.warn(`Subscription ${status}, will retry on next app reload`);
+            console.warn(`${msg} - will retry on next app reload`);
           }
         },
       );
+      console.log(`[${time}] setupRealtime: Subscription established`);
       realtimeChannelRef.current = channel;
+    } else {
+      console.warn(`[${time}] setupRealtime: onRemoteChangeRef is null!`);
     }
   }, []); // No dependencies - stable function
 
   // Lifecycle
   useEffect(() => {
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    console.log(`[${time}] useRealtimeSync: useEffect running, setting up realtime sync`);
+
     // Setup realtime subscription (only once on mount)
-    setupRealtime().catch(console.error);
+    setupRealtime().catch((error) => {
+      console.error(
+        `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] setupRealtime error:`,
+        error,
+      );
+    });
 
     // Initial push on mount
     triggerPush();
 
     // Cleanup
     return () => {
+      console.log(
+        `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] useRealtimeSync: Cleanup, unsubscribing`,
+      );
       if (realtimeChannelRef.current) realtimeChannelRef.current.unsubscribe();
       clearPushTimer();
     };
