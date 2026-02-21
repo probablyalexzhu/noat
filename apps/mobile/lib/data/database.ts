@@ -57,7 +57,16 @@ function getOrCreateConfigValue(key: string): string {
     return row.value;
   }
 
-  const id = Crypto.randomUUID();
+  let id: string;
+
+  if (key === 'user_id') {
+    // Hard-coded test user for development (matches desktop for cross-device sync)
+    id = 'b2db7bba-cbc5-4226-9ac8-eef18ca0097c';
+  } else {
+    // device_id stays unique per device
+    id = Crypto.randomUUID();
+  }
+
   db.runSync('INSERT INTO app_config (key, value) VALUES (?, ?)', [key, id]);
   return id;
 }
