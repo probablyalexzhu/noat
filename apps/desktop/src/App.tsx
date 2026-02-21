@@ -22,6 +22,7 @@ export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [width, setWidth] = useState(window.innerWidth);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [forceRefresh, setForceRefresh] = useState(0);
 
   const noteThemes = useRef(new Map<string, ThemeMode>());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -80,7 +81,8 @@ export default function App() {
           noteThemes.current.set(note.id, theme);
         }
 
-        // Trigger re-render
+        // Trigger re-render by updating forceRefresh
+        setForceRefresh((c) => c + 1);
       }
     },
     [noteIds],
@@ -311,7 +313,7 @@ export default function App() {
 
           return (
             <NotePage
-              key={id}
+              key={`${id}-${forceRefresh}`}
               noteId={id}
               content={cachedContent ?? ''}
               onChangeText={handleChangeText}
