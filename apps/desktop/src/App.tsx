@@ -1,49 +1,105 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useEffect, useState } from 'react';
+import { initDatabase, createNote, getNotesByCreationOrder } from './lib/database';
+import { subscribeToNotes } from './lib/realtime';
+import { push } from './lib/sync';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import './App.css';
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [status, setStatus] = useState('Initializing...');
+  const [notes, setNotes] = useState<string[]>([]);
+  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  useEffect(() => {
+    const init = async () => {
+      try {
+        // Initialize database
+        await initDatabase();
+        setStatus('Loading notes...');
+
+        // Load existing notes
+        const existingNotes = await getNotesByCreationOrder();
+        setNotes(existingNotes.map((n) => n.id));
+        setStatus(`Ready (${existingNotes.length} notes)`);
+
+        // Subscribe to realtime changes
+        const ch = await subscribeToNotes(
+          (noteId, event) => {
+            console.log(`Note ${event}: ${noteId}`);
+            loadNotes();
+          },
+          (status) => {
+            setStatus(`Realtime: ${status}`);
+          },
+        );
+        setChannel(ch);
+      } catch (error) {
+        console.error('Initialization failed:', error);
+        setStatus(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+
+    init();
+
+    // Cleanup on unmount
+    return () => {
+      if (channel) {
+        channel.unsubscribe();
+      }
+    };
+  }, []);
+
+  const loadNotes = async () => {
+    try {
+      const existingNotes = await getNotesByCreationOrder();
+      setNotes(existingNotes.map((n) => n.id));
+    } catch (error) {
+      console.error('Failed to load notes:', error);
+    }
+  };
+
+  const handleCreateTestNote = async () => {
+    try {
+      setStatus('Creating test note...');
+      const noteId = await createNote('Test Note', 'dark');
+      console.log(`Created note: ${noteId}`);
+
+      setStatus('Pushing to Supabase...');
+      await push();
+
+      await loadNotes();
+      setStatus(`Ready (${notes.length + 1} notes)`);
+    } catch (error) {
+      console.error('Failed to create note:', error);
+      setStatus(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
 
   return (
     <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+      <h1>Noat Desktop</h1>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <div className="status-panel">
+        <p>
+          <strong>Status:</strong> {status}
+        </p>
+        <p>
+          <strong>Notes:</strong> {notes.length}
+        </p>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+      <button onClick={handleCreateTestNote}>Create Test Note</button>
+
+      {notes.length > 0 && (
+        <div className="notes-list">
+          <h3>Local Notes:</h3>
+          <ul>
+            {notes.map((id) => (
+              <li key={id}>{id.substring(0, 8)}...</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </main>
   );
 }

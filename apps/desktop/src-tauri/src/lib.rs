@@ -27,6 +27,7 @@ pub fn run() {
         .build();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(shortcut_plugin)
         .plugin(tauri_plugin_opener::init())
         // macOS: hide app from the dock (Accessory activation policy = no dock icon).
