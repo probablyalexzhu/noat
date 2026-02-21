@@ -8,6 +8,7 @@ packages/*/node_modules/
 # Expo (mobile)
 apps/mobile/.expo/
 apps/mobile/expo-env.d.ts
+expo-env.d.ts
 apps/mobile/web-build/
 
 # dist
