@@ -50,7 +50,9 @@ export default function NoteControls({
             <ThemePicker currentTheme={activeTheme} onSelectTheme={onThemeChange} />
           </View>
           <View style={styles.addButtonContainer}>
-            <AddNoteButton onPress={onAddNote} colors={activeColors} />
+            {dotColors.length < 5 && (
+              <AddNoteButton onPress={onAddNote} colors={activeColors} />
+            )}
           </View>
         </View>
       )}
