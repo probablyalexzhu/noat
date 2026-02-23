@@ -1,3 +1,10 @@
+/**
+ * App.css — Global styles.
+ *
+ * Resets, scrollbar customization, textarea and button base styles.
+ * Placeholder color is driven by the --placeholder-color CSS variable
+ * set per-note in NotePage.
+ */
 html,
 body,
 #root {

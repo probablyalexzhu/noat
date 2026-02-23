@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Colors } from '@/lib/theme';
 
+const BOTTOM_SPACER_HEIGHT = 28;
+
 type NotePageProps = {
   noteId: string;
   content: string;
@@ -32,7 +34,6 @@ function NotePage({
     setContent(externalContent);
   }, [externalContent]);
 
-
   const handleChange = (text: string) => {
     setContent(text);
     onChangeText(noteId, text);
@@ -58,23 +59,25 @@ function NotePage({
         value={content}
         onChange={(e) => handleChange(e.target.value)}
         placeholder="Noat to self..."
-        style={{
-          flex: 1,
-          fontSize: 16,
-          padding: 16,
-          paddingBottom: 0,
-          color: colors.text,
-          backgroundColor: 'transparent',
-          border: 'none',
-          resize: 'none',
-          overflow: 'auto',
-          fontFamily: 'inherit',
-          lineHeight: 1.5,
-          '--placeholder-color': translucent ? colors.text : colors.placeholder,
-        } as React.CSSProperties}
+        style={
+          {
+            flex: 1,
+            fontSize: 16,
+            padding: 16,
+            paddingBottom: 0,
+            color: colors.text,
+            backgroundColor: 'transparent',
+            border: 'none',
+            resize: 'none',
+            overflow: 'auto',
+            fontFamily: 'inherit',
+            lineHeight: 1.5,
+            '--placeholder-color': translucent ? colors.text : colors.placeholder,
+          } as React.CSSProperties
+        }
       />
       {/* Spacer so the scrollbar ends above the ThemePicker in the bottom-right */}
-      <div style={{ height: 28, flexShrink: 0 }} />
+      <div style={{ height: BOTTOM_SPACER_HEIGHT, flexShrink: 0 }} />
     </div>
   );
 }

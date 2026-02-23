@@ -1,3 +1,10 @@
+/**
+ * theme.ts — Theme definitions and color utilities.
+ *
+ * Defines the five color palettes (paper, forest, ios, dark, cyberpunk),
+ * their canonical ordering, and helper functions for hex color manipulation
+ * (hexToRgba, lerpColor).
+ */
 export type ThemeMode = 'paper' | 'forest' | 'ios' | 'dark' | 'cyberpunk';
 
 export type Colors = {

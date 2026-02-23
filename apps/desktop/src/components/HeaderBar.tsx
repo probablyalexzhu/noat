@@ -1,3 +1,9 @@
+/**
+ * HeaderBar.tsx — Top navigation bar with delete/add buttons and dot indicators.
+ *
+ * Renders the note dot pagination and icon buttons that fade in on hover.
+ */
+import { CSSProperties } from 'react';
 import { Minus, Plus } from 'lucide-react';
 
 type HeaderBarProps = {
@@ -11,6 +17,25 @@ type HeaderBarProps = {
 };
 
 const INACTIVE_COLOR = '#888';
+const DOT_SIZE = 7;
+const DOT_GAP = 6;
+const ICON_SIZE = 16;
+const HOVER_OPACITY = 0.7;
+const FADE_TRANSITION_MS = 150;
+
+function iconButtonStyle(color: string, visible: boolean): CSSProperties {
+  return {
+    background: 'none',
+    border: 'none',
+    cursor: visible ? 'pointer' : 'default',
+    color,
+    opacity: visible ? HOVER_OPACITY : 0,
+    transition: `opacity ${FADE_TRANSITION_MS}ms ease`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+}
 
 export default function HeaderBar({
   dotColors,
@@ -21,6 +46,8 @@ export default function HeaderBar({
   showAddButton,
   hovered,
 }: HeaderBarProps) {
+  const activeColor = dotColors[activeIndex] ?? INACTIVE_COLOR;
+
   return (
     <div
       data-tauri-drag-region
@@ -36,21 +63,8 @@ export default function HeaderBar({
         pointerEvents: 'auto',
       }}
     >
-      <button
-        onClick={onDeleteNote}
-        style={{
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          color: dotColors[activeIndex] ?? '#888',
-          opacity: hovered ? 0.7 : 0,
-          transition: 'opacity 150ms ease',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Minus size={16} strokeWidth={2.5} />
+      <button onClick={onDeleteNote} style={iconButtonStyle(activeColor, hovered)}>
+        <Minus size={ICON_SIZE} strokeWidth={2.5} />
       </button>
 
       <div
@@ -59,7 +73,7 @@ export default function HeaderBar({
           flexDirection: 'row',
           justifyContent: 'center',
           alignItems: 'center',
-          gap: 6,
+          gap: DOT_GAP,
         }}
       >
         {dotColors.map((accent, index) => (
@@ -67,8 +81,8 @@ export default function HeaderBar({
             key={`dot-${index}`}
             onClick={() => onDotPress(index)}
             style={{
-              width: 7,
-              height: 7,
+              width: DOT_SIZE,
+              height: DOT_SIZE,
               borderRadius: '50%',
               backgroundColor: index === activeIndex ? accent : INACTIVE_COLOR,
               cursor: 'pointer',
@@ -80,19 +94,11 @@ export default function HeaderBar({
       <button
         onClick={onAddNote}
         style={{
-          background: 'none',
-          border: 'none',
-          cursor: showAddButton ? 'pointer' : 'default',
-          color: dotColors[activeIndex] ?? '#888',
-          opacity: hovered && showAddButton ? 0.7 : 0,
-          transition: 'opacity 150ms ease',
+          ...iconButtonStyle(activeColor, hovered && showAddButton),
           pointerEvents: showAddButton ? 'auto' : 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
         }}
       >
-        <Plus size={16} strokeWidth={2.5} />
+        <Plus size={ICON_SIZE} strokeWidth={2.5} />
       </button>
     </div>
   );

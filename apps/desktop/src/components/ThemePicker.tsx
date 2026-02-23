@@ -1,9 +1,16 @@
+/**
+ * ThemePicker.tsx — Expandable color theme selector with translucency toggle.
+ *
+ * Shows a single circle button that expands into a row of theme options
+ * and a translucency toggle (T) when clicked.
+ */
 import { useState } from 'react';
 import { palettes, themeOrder, type ThemeMode } from '@/lib/theme';
 
 const CIRCLE_SIZE = 16;
 const GAP = 6;
 const COLLAPSE_ANIMATION_DELAY_MS = 150;
+const SPRING_TRANSITION = 'transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms ease';
 
 function OptionCircle({
   theme,
@@ -30,7 +37,7 @@ function OptionCircle({
         cursor: 'pointer',
         transform: `scale(${isOpen ? 1 : 0})`,
         opacity: isOpen ? 1 : 0,
-        transition: 'transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms ease',
+        transition: SPRING_TRANSITION,
         flexShrink: 0,
       }}
     />
@@ -100,8 +107,7 @@ export default function ThemePicker({
             opacity: open ? (translucent ? 0.5 : 0.4) : 0,
             cursor: 'pointer',
             transform: `scale(${open ? 1 : 0})`,
-            transition:
-              'transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms ease',
+            transition: SPRING_TRANSITION,
             flexShrink: 0,
             fontSize: 8,
             fontWeight: 700,

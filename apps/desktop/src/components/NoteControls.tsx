@@ -1,6 +1,14 @@
+/**
+ * NoteControls.tsx — Full-screen overlay that positions the HeaderBar and ThemePicker.
+ *
+ * Sits absolutely over the note content with pointerEvents: 'none' so clicks
+ * pass through to the textarea, except on the controls themselves.
+ */
 import HeaderBar from '@/components/HeaderBar';
 import ThemePicker from '@/components/ThemePicker';
 import type { ThemeMode } from '@/lib/theme';
+
+const MAX_NOTES = 5;
 
 type NoteControlsProps = {
   dotColors: string[];
@@ -43,7 +51,7 @@ export default function NoteControls({
         onDeleteNote={onDeleteNote}
         onAddNote={onAddNote}
         onDotPress={onDotPress}
-        showAddButton={dotColors.length < 5}
+        showAddButton={dotColors.length < MAX_NOTES}
         hovered={hovered}
       />
 

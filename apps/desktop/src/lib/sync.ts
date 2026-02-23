@@ -1,40 +1,39 @@
-// sync.ts
-import { db, getUserId } from './database';
+/**
+ * sync.ts — Full push/pull sync with Supabase.
+ *
+ * push() sends all unsynced local notes to Supabase in batches.
+ * pull() fetches all remote notes and upserts them locally.
+ * cleanupOldDeletedNotesRemote() hard-deletes stale soft-deleted notes from Supabase.
+ */
+import { db, getUserId, upsertNoteFromRemote, waitForDatabase } from './database';
+import { getTimestamp } from './utils';
 import { supabase } from '@noat/sync';
+import type { Note, RemoteNote } from '@noat/sync';
 
-// ============================================
-// PUSH — Send unsynced notes to Supabase
-// ============================================
+const UPSERT_BATCH_SIZE = 50;
 export async function push() {
-  // Wait for database to be initialized (max 5 seconds)
-  let attempts = 0;
-  while (!db || attempts > 50) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    attempts++;
-  }
-
-  if (!db) {
+  const ready = await waitForDatabase();
+  if (!ready) {
     console.error('Push failed: Database not initialized');
     return;
   }
 
-  const rows = await db.select<Array<any>>('SELECT * FROM notes WHERE is_synced = 0');
+  const rows = await db.select<Note[]>('SELECT * FROM notes WHERE is_synced = 0');
   if (rows.length === 0) return;
 
-  const cleaned = rows.map(({ is_synced, ...rest }: any) => rest);
+  const cleaned: RemoteNote[] = rows.map(({ is_synced: _, ...rest }) => rest);
 
-  for (let i = 0; i < cleaned.length; i += 50) {
-    const batch = cleaned.slice(i, i + 50);
+  for (let i = 0; i < cleaned.length; i += UPSERT_BATCH_SIZE) {
+    const batch = cleaned.slice(i, i + UPSERT_BATCH_SIZE);
     const { error } = await supabase.from('notes').upsert(batch, { onConflict: 'id' });
 
     if (error) {
-      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-      console.error(`[${time}] Push failed:`, error.message);
+      console.error(`[${getTimestamp()}] Push failed:`, error.message);
       return;
     }
   }
 
-  const ids = rows.map((r: any) => r.id);
+  const ids = rows.map((r) => r.id);
   const placeholders = ids.map(() => '?').join(',');
   await db.execute(`UPDATE notes SET is_synced = 1 WHERE id IN (${placeholders})`, ids);
 
@@ -42,22 +41,15 @@ export async function push() {
     new Date().toISOString(),
   ]);
 
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-  console.log(`[${time}] Pushed ${rows.length} notes`);
+  console.log(`[${getTimestamp()}] Pushed ${rows.length} notes`);
 }
 
 // ============================================
 // PULL — Fetch notes from Supabase to local DB
 // ============================================
 export async function pull(): Promise<void> {
-  // Wait for database to be initialized (max 5 seconds)
-  let attempts = 0;
-  while (!db || attempts > 50) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    attempts++;
-  }
-
-  if (!db) {
+  const ready = await waitForDatabase();
+  if (!ready) {
     console.error('Pull failed: Database not initialized');
     return;
   }
@@ -70,33 +62,19 @@ export async function pull(): Promise<void> {
     .is('deleted_at', null);
 
   if (error) {
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-    console.error(`[${time}] Pull failed:`, error.message);
+    console.error(`[${getTimestamp()}] Pull failed:`, error.message);
     return;
   }
 
   if (!remoteNotes || remoteNotes.length === 0) {
-    console.log('[Pull] No notes to pull from Supabase');
     return;
   }
 
-  // Upsert remote notes into local DB (mark as synced)
   for (const note of remoteNotes) {
-    const cols = Object.keys(note);
-    const placeholders = cols.map(() => '?').join(',');
-    const updates = cols.map((c) => `${c} = excluded.${c}`).join(',');
-    const values = cols.map((c) => (note as any)[c]);
-
-    await db.execute(
-      `INSERT INTO notes (${cols.join(',')}, is_synced)
-       VALUES (${placeholders}, 1)
-       ON CONFLICT(id) DO UPDATE SET ${updates}, is_synced = 1`,
-      values,
-    );
+    await upsertNoteFromRemote(note as RemoteNote);
   }
 
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-  console.log(`[${time}] Pulled ${remoteNotes.length} notes from Supabase`);
+  console.log(`[${getTimestamp()}] Pulled ${remoteNotes.length} notes from Supabase`);
 
   await db.execute(`UPDATE sync_log SET last_synced_at = ? WHERE table_name = 'notes'`, [
     new Date().toISOString(),

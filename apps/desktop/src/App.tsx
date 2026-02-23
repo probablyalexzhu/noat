@@ -1,3 +1,11 @@
+/**
+ * App.tsx — Root orchestration component.
+ *
+ * Owns note state (IDs, active index, themes, content caches) and CRUD handlers.
+ * Delegates persistence to hooks (useAutosave, useRealtimeSync) and rendering
+ * to presentational components (NotePage, NoteControls). Handles horizontal
+ * scroll-snap navigation with background color interpolation between themes.
+ */
 import '@/App.css';
 import NoteControls from '@/components/NoteControls';
 import NotePage from '@/components/NotePage';
@@ -18,6 +26,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const DEFAULT_THEME: ThemeMode = 'paper';
+const SCROLL_TO_ACTIVE_DELAY_MS = 100;
+const BG_ANIMATION_DURATION_MS = 250;
 
 export default function App() {
   const [noteIds, setNoteIds] = useState<string[]>([]);
@@ -73,9 +83,7 @@ export default function App() {
       if (event === 'DELETE') {
         // Note was deleted remotely - remove from state
         setNoteIds((prev) => prev.filter((id) => id !== noteId));
-        contentCache.current.delete(noteId);
-        latestContents.current.delete(noteId);
-        noteThemes.current.delete(noteId);
+        removeNoteFromCache(noteId);
         return;
       }
 
@@ -88,12 +96,8 @@ export default function App() {
         const ids = notes.map((n) => n.id);
 
         notes.forEach((note, index) => {
-          const content = note.content ?? '';
-          contentCache.current.set(note.id, content);
-          latestContents.current.set(note.id, content);
-
           const theme = getValidThemeOrAssignDefault(note.theme, index);
-          noteThemes.current.set(note.id, theme);
+          initNoteInCache(note.id, note.content ?? '', theme);
         });
 
         setNoteIds(ids);
@@ -105,9 +109,7 @@ export default function App() {
         if (!note) {
           // Note might have been soft-deleted
           setNoteIds((prev) => prev.filter((id) => id !== noteId));
-          contentCache.current.delete(noteId);
-          latestContents.current.delete(noteId);
-          noteThemes.current.delete(noteId);
+          removeNoteFromCache(noteId);
           return;
         }
 
@@ -137,6 +139,18 @@ export default function App() {
     onNoteDirty: handleNoteDirty,
   });
 
+  const initNoteInCache = (id: string, content: string, theme: ThemeMode) => {
+    contentCache.current.set(id, content);
+    latestContents.current.set(id, content);
+    noteThemes.current.set(id, theme);
+  };
+
+  const removeNoteFromCache = (id: string) => {
+    contentCache.current.delete(id);
+    latestContents.current.delete(id);
+    noteThemes.current.delete(id);
+  };
+
   // Initialize database and load notes
   useEffect(() => {
     const init = async () => {
@@ -156,12 +170,8 @@ export default function App() {
           const ids = notes.map((n) => n.id);
 
           notes.forEach((note, index) => {
-            const content = note.content ?? '';
-            contentCache.current.set(note.id, content);
-            latestContents.current.set(note.id, content);
-
             const theme = getValidThemeOrAssignDefault(note.theme, index);
-            noteThemes.current.set(note.id, theme);
+            initNoteInCache(note.id, note.content ?? '', theme);
 
             if (!note.theme || !themeOrder.includes(note.theme as ThemeMode)) {
               updateNoteTheme(note.id, theme);
@@ -171,9 +181,7 @@ export default function App() {
           setNoteIds(ids);
         } else {
           const id = await createNote('Untitled', DEFAULT_THEME);
-          contentCache.current.set(id, '');
-          latestContents.current.set(id, '');
-          noteThemes.current.set(id, DEFAULT_THEME);
+          initNoteInCache(id, '', DEFAULT_THEME);
           setNoteIds([id]);
         }
 
@@ -210,7 +218,7 @@ export default function App() {
           behavior: 'smooth',
         });
       }
-    }, 100);
+    }, SCROLL_TO_ACTIVE_DELAY_MS);
   }, [activeIndex, noteIds.length, width]);
 
   function getValidThemeOrAssignDefault(
@@ -240,10 +248,7 @@ export default function App() {
     const nextTheme = themeOrder[(currentThemeIndex + 1) % themeOrder.length];
 
     const id = await createNote('Untitled', nextTheme);
-
-    contentCache.current.set(id, '');
-    latestContents.current.set(id, '');
-    noteThemes.current.set(id, nextTheme);
+    initNoteInCache(id, '', nextTheme);
 
     setNoteIds((prev) => {
       const next = [...prev, id];
@@ -260,18 +265,13 @@ export default function App() {
 
     flushNote(noteId);
     await deleteNote(noteId);
-
-    contentCache.current.delete(noteId);
-    latestContents.current.delete(noteId);
-    noteThemes.current.delete(noteId);
+    removeNoteFromCache(noteId);
 
     const remaining = noteIds.filter((id) => id !== noteId);
 
     if (remaining.length === 0) {
       const newId = await createNote('Untitled', DEFAULT_THEME);
-      contentCache.current.set(newId, '');
-      latestContents.current.set(newId, '');
-      noteThemes.current.set(newId, DEFAULT_THEME);
+      initNoteInCache(newId, '', DEFAULT_THEME);
       setNoteIds([newId]);
       setActiveIndex(0);
     } else {
@@ -333,7 +333,7 @@ export default function App() {
         clearTimeout(animateBgTimer.current);
         animateBgTimer.current = setTimeout(() => {
           animateBgRef.current = false;
-        }, 250);
+        }, BG_ANIMATION_DURATION_MS);
         if (scrollRef.current) {
           scrollRef.current.scrollTo({ left: index * width, behavior: 'instant' });
         }

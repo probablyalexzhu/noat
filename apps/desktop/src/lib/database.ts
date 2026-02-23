@@ -1,4 +1,14 @@
+/**
+ * database.ts — Local SQLite database access via @tauri-apps/plugin-sql.
+ *
+ * Manages schema creation, app config (user_id, device_id), and all note
+ * CRUD operations. Re-exports the Note type from @noat/sync. Also provides
+ * waitForDatabase() and upsertNoteFromRemote() shared by sync and realtime layers.
+ */
 import Database from '@tauri-apps/plugin-sql';
+import type { Note, RemoteNote } from '@noat/sync';
+
+export type { Note } from '@noat/sync';
 
 let db: Database;
 
@@ -80,19 +90,6 @@ export async function getUserId(): Promise<string> {
   return getOrCreateConfigValue('user_id');
 }
 
-export type Note = {
-  id: string;
-  user_id: string;
-  title: string;
-  content: string;
-  theme: string | null;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-  is_synced: number;
-  device_id: string;
-};
-
 function getCurrentTimestamp(): string {
   return new Date().toISOString();
 }
@@ -159,6 +156,36 @@ export async function cleanupOldDeletedNotes(daysOld: number = 7): Promise<void>
   await db.execute('DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?', [
     cutoff.toISOString(),
   ]);
+}
+
+/**
+ * Wait for the database module-level `db` to be initialized.
+ * Polls every 100ms up to 50 attempts (5 seconds).
+ */
+export async function waitForDatabase(): Promise<boolean> {
+  let attempts = 0;
+  while (!db && attempts < 50) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    attempts++;
+  }
+  return !!db;
+}
+
+/**
+ * Upsert a remote note into local SQLite, marking it as synced.
+ * Used by both full-pull (sync.ts) and realtime single-note upserts (realtime.ts).
+ */
+export async function upsertNoteFromRemote(note: RemoteNote): Promise<void> {
+  const cols = Object.keys(note);
+  const placeholders = cols.map(() => '?').join(',');
+  const updates = cols.map((c) => `${c} = excluded.${c}`).join(',');
+
+  await db.execute(
+    `INSERT INTO notes (${cols.join(',')}, is_synced)
+     VALUES (${placeholders}, 1)
+     ON CONFLICT(id) DO UPDATE SET ${updates}, is_synced = 1`,
+    cols.map((c) => note[c as keyof RemoteNote]),
+  );
 }
 
 export { db };
