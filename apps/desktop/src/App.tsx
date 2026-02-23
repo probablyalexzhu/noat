@@ -316,6 +316,29 @@ export default function App() {
     }
   }, [width, activeIndex, noteIds, flushNote]);
 
+  // Brief CSS transition for background color during dot-click navigation only.
+  // During swipes, handleScroll updates color at ~60fps so the transition would cause visible lag.
+  const animateBgRef = useRef(false);
+  const animateBgTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const handleDotPress = useCallback(
+    (index: number) => {
+      if (index >= 0 && index < noteIds.length && index !== activeIndex) {
+        flushNote(noteIds[activeIndex]);
+        animateBgRef.current = true;
+        clearTimeout(animateBgTimer.current);
+        animateBgTimer.current = setTimeout(() => {
+          animateBgRef.current = false;
+        }, 250);
+        if (scrollRef.current) {
+          scrollRef.current.scrollTo({ left: index * width, behavior: 'instant' });
+        }
+        setActiveIndex(index);
+      }
+    },
+    [noteIds, activeIndex, width, flushNote],
+  );
+
   const dotColors = noteIds.map((id) => {
     const theme = getThemeForNote(id);
     return palettes[theme].accent;
@@ -344,6 +367,7 @@ export default function App() {
       style={{
         width: '100%',
         height: '100%',
+        transition: animateBgRef.current ? 'background-color 200ms ease' : 'none',
         backgroundColor: (() => {
           const bg = scrollBackground ?? activeColors.background;
           return translucent ? hexToRgba(bg, 0.4) : bg;
@@ -401,6 +425,7 @@ export default function App() {
         activeTheme={activeTheme}
         onDeleteNote={handleDeleteNote}
         onAddNote={handleAddNote}
+        onDotPress={handleDotPress}
         onThemeChange={handleThemeChange}
         hovered={hovered}
         translucent={translucent}

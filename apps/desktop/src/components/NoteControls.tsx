@@ -8,6 +8,7 @@ type NoteControlsProps = {
   activeTheme: ThemeMode;
   onDeleteNote: () => void;
   onAddNote: () => void;
+  onDotPress: (index: number) => void;
   onThemeChange: (theme: ThemeMode) => void;
   hovered: boolean;
   translucent: boolean;
@@ -20,6 +21,7 @@ export default function NoteControls({
   activeTheme,
   onDeleteNote,
   onAddNote,
+  onDotPress,
   onThemeChange,
   hovered,
   translucent,
@@ -40,6 +42,7 @@ export default function NoteControls({
         activeIndex={activeIndex}
         onDeleteNote={onDeleteNote}
         onAddNote={onAddNote}
+        onDotPress={onDotPress}
         showAddButton={dotColors.length < 5}
         hovered={hovered}
       />

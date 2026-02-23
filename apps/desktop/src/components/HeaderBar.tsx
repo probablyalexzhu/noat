@@ -3,18 +3,19 @@ type HeaderBarProps = {
   activeIndex: number;
   onDeleteNote: () => void;
   onAddNote: () => void;
+  onDotPress: (index: number) => void;
   showAddButton: boolean;
   hovered: boolean;
 };
 
-const ACTIVE_OPACITY = 1;
-const INACTIVE_OPACITY = 0.4;
+const INACTIVE_COLOR = '#888';
 
 export default function HeaderBar({
   dotColors,
   activeIndex,
   onDeleteNote,
   onAddNote,
+  onDotPress,
   showAddButton,
   hovered,
 }: HeaderBarProps) {
@@ -63,12 +64,13 @@ export default function HeaderBar({
         {dotColors.map((accent, index) => (
           <div
             key={`dot-${index}`}
+            onClick={() => onDotPress(index)}
             style={{
               width: 7,
               height: 7,
               borderRadius: '50%',
-              backgroundColor: accent,
-              opacity: index === activeIndex ? ACTIVE_OPACITY : INACTIVE_OPACITY,
+              backgroundColor: index === activeIndex ? accent : INACTIVE_COLOR,
+              cursor: 'pointer',
             }}
           />
         ))}
