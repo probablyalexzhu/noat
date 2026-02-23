@@ -1,3 +1,5 @@
+import { Minus, Plus } from 'lucide-react';
+
 type HeaderBarProps = {
   dotColors: string[];
   activeIndex: number;
@@ -40,16 +42,15 @@ export default function HeaderBar({
           background: 'none',
           border: 'none',
           cursor: 'pointer',
-          fontSize: 20,
-          lineHeight: '20px',
-          fontWeight: '300',
           color: dotColors[activeIndex] ?? '#888',
           opacity: hovered ? 0.7 : 0,
           transition: 'opacity 150ms ease',
-          padding: '0 8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        −
+        <Minus size={16} strokeWidth={2.5} />
       </button>
 
       <div
@@ -82,17 +83,16 @@ export default function HeaderBar({
           background: 'none',
           border: 'none',
           cursor: showAddButton ? 'pointer' : 'default',
-          fontSize: 20,
-          lineHeight: '20px',
-          fontWeight: '300',
           color: dotColors[activeIndex] ?? '#888',
           opacity: hovered && showAddButton ? 0.7 : 0,
           transition: 'opacity 150ms ease',
-          padding: '0 8px',
           pointerEvents: showAddButton ? 'auto' : 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        +
+        <Plus size={16} strokeWidth={2.5} />
       </button>
     </div>
   );

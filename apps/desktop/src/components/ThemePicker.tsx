@@ -132,11 +132,11 @@ export default function ThemePicker({
             height: CIRCLE_SIZE,
             borderRadius: '50%',
             backgroundColor: 'transparent',
-            border: `1px solid ${colors.accent}`,
+            border: `1.5px solid ${colors.accent}`,
             cursor: 'pointer',
             flexShrink: 0,
             zIndex: 20,
-            opacity: hovered || open ? 1 : 0,
+            opacity: hovered || open ? 0.7 : 0,
             transition: 'opacity 150ms ease',
           }}
         />
