@@ -14,6 +14,7 @@ import {
 import { cleanupOldDeletedNotesRemote, pull } from '@/lib/sync';
 import { hexToRgba, lerpColor, palettes, themeOrder, type ThemeMode } from '@/lib/theme';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const DEFAULT_THEME: ThemeMode = 'paper';
@@ -177,6 +178,7 @@ export default function App() {
         }
 
         setIsInitialized(true);
+        await getCurrentWindow().show();
       } catch (error) {
         console.error('Initialization failed:', error);
       }
@@ -344,23 +346,7 @@ export default function App() {
     return palettes[theme].accent;
   });
 
-  if (!isInitialized) {
-    return (
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: activeColors.background,
-          color: activeColors.text,
-        }}
-      >
-        Initializing...
-      </div>
-    );
-  }
+  if (!isInitialized) return null;
 
   return (
     <div
