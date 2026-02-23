@@ -106,7 +106,6 @@ export default function App() {
         // Pull pre-existing notes from Supabase
         await pull();
 
-        
         // Cleanup old deleted notes (local + cloud)
         await cleanupOldDeletedNotes(7);
         await cleanupOldDeletedNotesRemote(7).catch(console.error);
@@ -304,7 +303,7 @@ export default function App() {
       <div
         data-tauri-drag-region
         style={{
-          height: '24px',
+          height: '28px',
           userSelect: 'none',
           flexShrink: 0,
         }}
@@ -344,7 +343,6 @@ export default function App() {
         dotColors={dotColors}
         activeIndex={activeIndex}
         activeTheme={activeTheme}
-        activeColors={activeColors}
         onDeleteNote={handleDeleteNote}
         onAddNote={handleAddNote}
         onThemeChange={handleThemeChange}

@@ -1,14 +1,11 @@
-import AddNoteButton from '@/components/AddNoteButton';
-import DeleteNoteButton from '@/components/DeleteNoteButton';
-import DotIndicator from '@/components/DotIndicator';
+import HeaderBar from '@/components/HeaderBar';
 import ThemePicker from '@/components/ThemePicker';
-import type { Colors, ThemeMode } from '@/lib/theme';
+import type { ThemeMode } from '@/lib/theme';
 
 type NoteControlsProps = {
   dotColors: string[];
   activeIndex: number;
   activeTheme: ThemeMode;
-  activeColors: Colors;
   onDeleteNote: () => void;
   onAddNote: () => void;
   onThemeChange: (theme: ThemeMode) => void;
@@ -18,7 +15,6 @@ export default function NoteControls({
   dotColors,
   activeIndex,
   activeTheme,
-  activeColors,
   onDeleteNote,
   onAddNote,
   onThemeChange,
@@ -33,7 +29,13 @@ export default function NoteControls({
         flexDirection: 'column',
       }}
     >
-      <DotIndicator dotColors={dotColors} activeIndex={activeIndex} />
+      <HeaderBar
+        dotColors={dotColors}
+        activeIndex={activeIndex}
+        onDeleteNote={onDeleteNote}
+        onAddNote={onAddNote}
+        showAddButton={dotColors.length < 5}
+      />
 
       <div style={{ flex: 1 }} />
 
@@ -42,22 +44,12 @@ export default function NoteControls({
           display: 'flex',
           flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingLeft: 16,
-          paddingRight: 16,
+          justifyContent: 'center',
           paddingBottom: 6,
           pointerEvents: 'auto',
         }}
       >
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start' }}>
-          <DeleteNoteButton onPress={onDeleteNote} colors={activeColors} />
-        </div>
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-          <ThemePicker currentTheme={activeTheme} onSelectTheme={onThemeChange} />
-        </div>
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-          {dotColors.length < 5 && <AddNoteButton onPress={onAddNote} colors={activeColors} />}
-        </div>
+        <ThemePicker currentTheme={activeTheme} onSelectTheme={onThemeChange} />
       </div>
     </div>
   );
