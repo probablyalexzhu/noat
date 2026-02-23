@@ -7,6 +7,7 @@ type NotePageProps = {
   onChangeText: (noteId: string, text: string) => void;
   width: number;
   colors: Colors;
+  translucent: boolean;
 };
 
 /**
@@ -21,6 +22,7 @@ function NotePage({
   onChangeText,
   width,
   colors,
+  translucent,
 }: NotePageProps) {
   const [content, setContent] = useState(externalContent);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -68,7 +70,8 @@ function NotePage({
           overflow: 'auto',
           fontFamily: 'inherit',
           lineHeight: 1.5,
-        }}
+          '--placeholder-color': translucent ? colors.text : colors.placeholder,
+        } as React.CSSProperties}
       />
       {/* Spacer so the scrollbar ends above the ThemePicker in the bottom-right */}
       <div style={{ height: 28, flexShrink: 0 }} />

@@ -402,6 +402,7 @@ export default function App() {
               onChangeText={handleChangeText}
               width={width}
               colors={itemColors}
+              translucent={translucent}
             />
           );
         })}

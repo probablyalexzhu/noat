@@ -28,6 +28,11 @@ textarea {
   scrollbar-width: thin;
 }
 
+textarea::placeholder {
+  color: var(--placeholder-color);
+  opacity: 0.6;
+}
+
 textarea::-webkit-scrollbar {
   width: 4px;
 }
