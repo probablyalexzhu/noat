@@ -7,7 +7,6 @@ type NotePageProps = {
   onChangeText: (noteId: string, text: string) => void;
   width: number;
   colors: Colors;
-  translucent?: boolean;
 };
 
 /**
@@ -22,7 +21,6 @@ function NotePage({
   onChangeText,
   width,
   colors,
-  translucent,
 }: NotePageProps) {
   const [content, setContent] = useState(externalContent);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -43,7 +41,7 @@ function NotePage({
       style={{
         width,
         height: '100%',
-        backgroundColor: translucent ? 'transparent' : colors.background,
+        backgroundColor: 'transparent',
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
@@ -64,7 +62,7 @@ function NotePage({
           padding: 16,
           paddingBottom: 0,
           color: colors.text,
-          backgroundColor: translucent ? 'transparent' : colors.background,
+          backgroundColor: 'transparent',
           border: 'none',
           resize: 'none',
           overflow: 'auto',

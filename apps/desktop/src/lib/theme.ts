@@ -55,3 +55,18 @@ export function hexToRgba(hex: string, alpha: number): string {
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+
+/** Linearly interpolate between two '#rrggbb' hex colors. t=0 returns colorA, t=1 returns colorB. */
+export function lerpColor(colorA: string, colorB: string, t: number): string {
+  const rA = parseInt(colorA.slice(1, 3), 16);
+  const gA = parseInt(colorA.slice(3, 5), 16);
+  const bA = parseInt(colorA.slice(5, 7), 16);
+  const rB = parseInt(colorB.slice(1, 3), 16);
+  const gB = parseInt(colorB.slice(3, 5), 16);
+  const bB = parseInt(colorB.slice(5, 7), 16);
+  const r = Math.round(rA + (rB - rA) * t);
+  const g = Math.round(gA + (gB - gA) * t);
+  const b = Math.round(bA + (bB - bA) * t);
+  const hex = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${hex(r)}${hex(g)}${hex(b)}`;
+}

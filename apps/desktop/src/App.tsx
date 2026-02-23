@@ -12,7 +12,7 @@ import {
   updateNoteTheme,
 } from '@/lib/database';
 import { cleanupOldDeletedNotesRemote, pull } from '@/lib/sync';
-import { hexToRgba, palettes, themeOrder, type ThemeMode } from '@/lib/theme';
+import { hexToRgba, lerpColor, palettes, themeOrder, type ThemeMode } from '@/lib/theme';
 import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -60,6 +60,8 @@ export default function App() {
       unlistenLeave.then((f) => f());
     };
   }, []);
+
+  const [scrollBackground, setScrollBackground] = useState<string | null>(null);
 
   const noteThemes = useRef(new Map<string, ThemeMode>());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -288,11 +290,24 @@ export default function App() {
     [noteIds, activeIndex, handleNoteDirty],
   );
 
-  // Handle scroll detection to update active index
+  // Handle scroll detection to update active index and interpolate background color
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return;
 
     const scrollLeft = scrollRef.current.scrollLeft;
+
+    // Interpolate background color between adjacent notes during scroll
+    if (width > 0 && noteIds.length > 1) {
+      const floatIndex = scrollLeft / width;
+      const leftIndex = Math.max(0, Math.min(Math.floor(floatIndex), noteIds.length - 1));
+      const rightIndex = Math.min(leftIndex + 1, noteIds.length - 1);
+      const t = floatIndex - leftIndex;
+
+      const leftBg = palettes[getThemeForNote(noteIds[leftIndex])].background;
+      const rightBg = palettes[getThemeForNote(noteIds[rightIndex])].background;
+      setScrollBackground(lerpColor(leftBg, rightBg, t));
+    }
+
     const newIndex = Math.round(scrollLeft / width);
 
     if (newIndex !== activeIndex && newIndex >= 0 && newIndex < noteIds.length) {
@@ -329,9 +344,10 @@ export default function App() {
       style={{
         width: '100%',
         height: '100%',
-        backgroundColor: translucent
-          ? hexToRgba(activeColors.background, 0.4)
-          : activeColors.background,
+        backgroundColor: (() => {
+          const bg = scrollBackground ?? activeColors.background;
+          return translucent ? hexToRgba(bg, 0.4) : bg;
+        })(),
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
@@ -374,7 +390,6 @@ export default function App() {
               onChangeText={handleChangeText}
               width={width}
               colors={itemColors}
-              translucent={translucent}
             />
           );
         })}
