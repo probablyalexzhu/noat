@@ -5,6 +5,7 @@ body,
   margin: 0;
   padding: 0;
   background: transparent;
+  overscroll-behavior: none;
 }
 
 /* Hide scrollbar while keeping scroll functionality */
@@ -24,6 +25,24 @@ body {
 textarea {
   font-family: inherit;
   outline: none;
+  scrollbar-width: thin;
+}
+
+textarea::-webkit-scrollbar {
+  width: 4px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 2px;
+}
+
+textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
 }
 
 button {

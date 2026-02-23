@@ -32,13 +32,6 @@ function NotePage({
     setContent(externalContent);
   }, [externalContent]);
 
-  // Auto-resize textarea to fit content
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
-    }
-  }, [content]);
 
   const handleChange = (text: string) => {
     setContent(text);
@@ -54,7 +47,9 @@ function NotePage({
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
+        overflow: 'hidden',
         scrollSnapAlign: 'start',
+        scrollSnapStop: 'always',
       }}
       onClick={() => textareaRef.current?.focus()}
     >
@@ -67,15 +62,18 @@ function NotePage({
           flex: 1,
           fontSize: 16,
           padding: 16,
+          paddingBottom: 0,
           color: colors.text,
           backgroundColor: translucent ? 'transparent' : colors.background,
           border: 'none',
           resize: 'none',
-          overflow: 'hidden',
+          overflow: 'auto',
           fontFamily: 'inherit',
           lineHeight: 1.5,
         }}
       />
+      {/* Spacer so the scrollbar ends above the ThemePicker in the bottom-right */}
+      <div style={{ height: 28, flexShrink: 0 }} />
     </div>
   );
 }

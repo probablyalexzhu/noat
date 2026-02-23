@@ -352,6 +352,7 @@ export default function App() {
         style={{
           display: 'flex',
           overflowX: 'auto',
+          overflowY: 'hidden',
           scrollSnapType: 'x mandatory',
           scrollBehavior: 'smooth',
           flex: 1,
