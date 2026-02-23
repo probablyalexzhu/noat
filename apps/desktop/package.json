@@ -29,7 +29,6 @@
     "@vitejs/plugin-react": "^4.6.0",
     "eslint": "^9",
     "eslint-config-prettier": "^10",
-    "eslint-plugin-prettier": "^5",
     "eslint-plugin-react-hooks": "^5",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8",
