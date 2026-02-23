@@ -35,11 +35,13 @@ src-tauri/
 ## Architecture
 
 `App.tsx` is the orchestration layer: it owns note IDs, active index, theme map, and content caches. It delegates:
+
 - **Persistence** to `useAutosave` (local SQLite debounce) and `useRealtimeSync` (cloud push/pull)
 - **UI** to presentational components (`NotePage`, `NoteControls`, `HeaderBar`, `ThemePicker`)
 - **Data access** to `lib/` modules (`database.ts`, `sync.ts`, `realtime.ts`)
 
 Sync architecture:
+
 - **Pull**: Realtime `postgres_changes` subscription delivers remote changes in <100ms
 - **Push**: Event-driven debounce — `useAutosave` saves locally at 300ms, then `useRealtimeSync` pushes at 1.5s after last save
 
@@ -55,7 +57,8 @@ Sync architecture:
 
 - `npm run dev` — Vite dev server (port 1420)
 - `npm run build` — TypeScript + Vite production build
-- `npx tsc --noEmit` — type-check
-- `npx prettier --write src/` — format TypeScript/CSS
+- `npm run lint` — ESLint check
+- `npm run format` — Prettier auto-format
+- `npm run typecheck` — type-check (tsc --noEmit)
 - `cargo check` — type-check Rust (run from `src-tauri/`)
 - `npm run tauri dev` — full Tauri dev mode (Rust + Vite)

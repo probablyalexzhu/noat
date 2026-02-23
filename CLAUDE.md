@@ -1,52 +1,57 @@
-# Noat — Engineering Standards
+# Noat — Monorepo Engineering Standards
 
 ## Project overview
 
-Noat is a minimalist note-taking app built with React Native (Expo). Notes are stored locally in SQLite via expo-sqlite and realtime cloud sync via Supabase Realtime. The app supports multiple notes (swipeable via FlatList), per-note color themes, markdown editing, and debounced autosave.
+Noat is a minimalist note-taking app with local-first SQLite storage and realtime Supabase sync. This monorepo contains the mobile app (Expo/React Native), desktop app (Tauri/React/Vite), and a shared sync package.
 
-## Directory layout
+## Monorepo structure
 
 ```
-app/          Expo Router screens — index.tsx is the main (and only) screen
-components/   React components — presentational where possible
-hooks/        Custom React hooks — encapsulate side effects and stateful logic
-lib/          Non-React utilities — database access, theme definitions, markdown styles
-assets/       Static assets (images, icons)
+apps/mobile/      Expo (React Native) — iOS/Android client
+apps/desktop/     Tauri (Rust + React + Vite) — macOS/Windows/Linux client
+packages/sync/    Shared Supabase sync logic
 ```
+
+Each app has its own `CLAUDE.md` with app-specific architecture, patterns, and commands. Refer to those for detailed guidance:
+
+- `apps/mobile/CLAUDE.md` — mobile-specific standards
+- `apps/desktop/CLAUDE.md` — desktop-specific standards
+
+## Shared conventions
+
+- TypeScript with `strict: true` across all packages
+- Prettier: single quotes, trailing commas, 100 char line width, 2-space indent (see `.prettierrc`)
+- ESLint with prettier plugin in each app
+- Pre-commit hooks via husky + lint-staged (auto-formats and lints staged files)
+- Path alias `@/*` maps to the app/package source root
 
 ## Architecture patterns
 
-**Separation of concerns.** The main screen (`app/index.tsx`) is an orchestration layer: it owns core state and CRUD handlers, delegates side effects to hooks, and delegates UI chrome to components.
+**Separation of concerns.** Each app's main screen/component is an orchestration layer: it owns core state and CRUD handlers, delegates side effects to hooks, and delegates UI to components.
 
-- **Hooks** (`hooks/`) encapsulate stateful logic with side effects (timers, listeners, keyboard events). Each hook has a clear single responsibility and a documented interface.
-- **Components** (`components/`) are presentational where possible — they receive props and render UI. Stateful components (like `NotePage`) keep state minimal and local.
-- **Lib** (`lib/`) contains pure utilities with no React dependencies (database, theme palettes, markdown styles).
+- **Hooks** (`hooks/`) encapsulate stateful logic with side effects (timers, listeners, keyboard events). Each hook has a clear single responsibility.
+- **Components** (`components/`) are presentational where possible — they receive props and render UI.
+- **Lib** (`lib/`) contains pure utilities with no React dependencies (database, theme palettes, sync).
 
-**Comment blocks for subtle interactions.** When code involves non-obvious coordination between multiple files or mechanisms (e.g., the keyboard/swipe interaction between `useKeyboardNavigation`, the FlatList, and `NotePage`), add a block comment explaining:
+**Comment blocks for subtle interactions.** When code involves non-obvious coordination between multiple files or mechanisms, add a block comment explaining the "why", not the "what". Don't add comments for self-explanatory code.
 
-- What problem it solves
-- How the pieces coordinate
-- Cross-references to related files
+## Bug fixing guidelines
 
-Don't add comments for self-explanatory code. Only comment the "why", not the "what".
-
-## Code Style
-
-- TypeScript with `strict: true`
-- Prettier: single quotes, trailing commas, 100 char line width, 2-space indent
-- ESLint: expo config + prettier plugin
-- Run `npm run lint` to check and `npm run format` to auto-format
-- Path alias `@/*` maps to the project root
-
-## Bug Fixing Guidelines
-
-When fixing UI bugs (especially keyboard/focus/animation issues), try the simplest possible approach first. Do NOT layer complex workarounds (pointerEvents manipulation, delayed refs, event suppression hacks). If the first simple fix doesn't work, step back and question the overall approach before adding complexity.
-
-When a fix introduces a regression (text disappearing, animations breaking, layout shifting), immediately revert the change rather than trying to patch the regression on top of it. Propose a cleaner alternative approach.
+When fixing UI bugs, try the simplest possible approach first. Do NOT layer complex workarounds. If a fix introduces a regression, immediately revert and propose a cleaner alternative.
 
 ## Commands
 
-- `npm run lint` — ESLint check
-- `npm run format` — Prettier auto-format
-- `npx tsc --noEmit` — type-check (ignore errors from `old-app-example/`)
-- `npx expo start` — start dev server
+Monorepo-level:
+
+- `npm run format` — Prettier auto-format across all packages
+- `npm run lint` — ESLint check across all workspaces
+- `npm run typecheck` — type-check across all workspaces
+
+Per-workspace (run from root):
+
+- `npm run lint --workspace=apps/desktop` — lint desktop
+- `npm run lint --workspace=apps/mobile` — lint mobile
+- `npm run format --workspace=apps/desktop` — format desktop
+- `npm run typecheck --workspace=apps/desktop` — type-check desktop
+
+See each app's `CLAUDE.md` for app-specific dev/build commands.

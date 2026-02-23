@@ -11,9 +11,25 @@
     "mobile": "npm run start --workspace=apps/mobile",
     "desktop": "npm run dev --workspace=apps/desktop",
     "format": "prettier --write .",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "apps/desktop/src/**/*.{ts,tsx,js,jsx}": [
+      "prettier --write",
+      "eslint -c apps/desktop/eslint.config.js --fix"
+    ],
+    "*.{ts,tsx,js,jsx}": [
+      "prettier --write"
+    ],
+    "*.{css,json,md,html}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
+    "husky": "^9",
+    "lint-staged": "^16",
     "prettier": "^3.8.1"
   }
 }
