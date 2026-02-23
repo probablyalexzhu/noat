@@ -41,9 +41,17 @@ type ThemePickerProps = {
   currentTheme: ThemeMode;
   onSelectTheme: (theme: ThemeMode) => void;
   hovered: boolean;
+  translucent: boolean;
+  onToggleTranslucent: () => void;
 };
 
-export default function ThemePicker({ currentTheme, onSelectTheme, hovered }: ThemePickerProps) {
+export default function ThemePicker({
+  currentTheme,
+  onSelectTheme,
+  hovered,
+  translucent,
+  onToggleTranslucent,
+}: ThemePickerProps) {
   const colors = palettes[currentTheme];
   const [open, setOpen] = useState(false);
 
@@ -80,6 +88,33 @@ export default function ThemePicker({ currentTheme, onSelectTheme, hovered }: Th
           zIndex: 10,
         }}
       >
+        {/* Translucency toggle — visible only when picker is expanded */}
+        <button
+          onClick={onToggleTranslucent}
+          style={{
+            width: CIRCLE_SIZE,
+            height: CIRCLE_SIZE,
+            borderRadius: '50%',
+            backgroundColor: translucent ? colors.accent : 'transparent',
+            border: `1.5px solid ${colors.accent}`,
+            opacity: open ? (translucent ? 0.5 : 0.4) : 0,
+            cursor: 'pointer',
+            transform: `scale(${open ? 1 : 0})`,
+            transition:
+              'transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms ease',
+            flexShrink: 0,
+            fontSize: 8,
+            fontWeight: 700,
+            lineHeight: 1,
+            color: translucent ? colors.background : colors.accent,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          T
+        </button>
+
         {themeOrder.map((theme) => (
           <OptionCircle
             key={theme}

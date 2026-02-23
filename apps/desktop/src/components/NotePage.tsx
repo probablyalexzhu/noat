@@ -7,6 +7,7 @@ type NotePageProps = {
   onChangeText: (noteId: string, text: string) => void;
   width: number;
   colors: Colors;
+  translucent?: boolean;
 };
 
 /**
@@ -15,7 +16,14 @@ type NotePageProps = {
  * Unlike mobile, there's no keyboard focus/blur concept here.
  * The textarea is always interactive, and we auto-resize it to fit content.
  */
-function NotePage({ noteId, content: externalContent, onChangeText, width, colors }: NotePageProps) {
+function NotePage({
+  noteId,
+  content: externalContent,
+  onChangeText,
+  width,
+  colors,
+  translucent,
+}: NotePageProps) {
   const [content, setContent] = useState(externalContent);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -42,7 +50,7 @@ function NotePage({ noteId, content: externalContent, onChangeText, width, color
       style={{
         width,
         height: '100%',
-        backgroundColor: colors.background,
+        backgroundColor: translucent ? 'transparent' : colors.background,
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
@@ -60,7 +68,7 @@ function NotePage({ noteId, content: externalContent, onChangeText, width, color
           fontSize: 16,
           padding: 16,
           color: colors.text,
-          backgroundColor: colors.background,
+          backgroundColor: translucent ? 'transparent' : colors.background,
           border: 'none',
           resize: 'none',
           overflow: 'hidden',

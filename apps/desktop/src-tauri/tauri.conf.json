@@ -21,7 +21,12 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": true,
-        "acceptFirstMouse": true
+        "acceptFirstMouse": true,
+        "windowEffects": {
+          "effects": ["hudWindow"],
+          "state": "active",
+          "radius": 16.0
+        }
       }
     ],
     "security": {

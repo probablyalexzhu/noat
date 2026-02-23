@@ -10,6 +10,8 @@ type NoteControlsProps = {
   onAddNote: () => void;
   onThemeChange: (theme: ThemeMode) => void;
   hovered: boolean;
+  translucent: boolean;
+  onToggleTranslucent: () => void;
 };
 
 export default function NoteControls({
@@ -20,6 +22,8 @@ export default function NoteControls({
   onAddNote,
   onThemeChange,
   hovered,
+  translucent,
+  onToggleTranslucent,
 }: NoteControlsProps) {
   return (
     <div
@@ -53,7 +57,13 @@ export default function NoteControls({
           pointerEvents: 'auto',
         }}
       >
-        <ThemePicker currentTheme={activeTheme} onSelectTheme={onThemeChange} hovered={hovered} />
+        <ThemePicker
+          currentTheme={activeTheme}
+          onSelectTheme={onThemeChange}
+          hovered={hovered}
+          translucent={translucent}
+          onToggleTranslucent={onToggleTranslucent}
+        />
       </div>
     </div>
   );

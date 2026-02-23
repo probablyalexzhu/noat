@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
+import '@/App.css';
+import NoteControls from '@/components/NoteControls';
+import NotePage from '@/components/NotePage';
+import { useAutosave } from '@/hooks/useAutosave';
+import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 import {
   cleanupOldDeletedNotes,
   createNote,
@@ -9,12 +12,9 @@ import {
   updateNoteTheme,
 } from '@/lib/database';
 import { cleanupOldDeletedNotesRemote, pull } from '@/lib/sync';
-import { palettes, themeOrder, type ThemeMode } from '@/lib/theme';
-import NoteControls from '@/components/NoteControls';
-import NotePage from '@/components/NotePage';
-import { useAutosave } from '@/hooks/useAutosave';
-import { useRealtimeSync } from '@/hooks/useRealtimeSync';
-import '@/App.css';
+import { hexToRgba, palettes, themeOrder, type ThemeMode } from '@/lib/theme';
+import { listen } from '@tauri-apps/api/event';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const DEFAULT_THEME: ThemeMode = 'paper';
 
@@ -25,6 +25,17 @@ export default function App() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [forceRefresh, setForceRefresh] = useState(0);
   const [hovered, setHovered] = useState(false);
+  const [translucent, setTranslucent] = useState(
+    () => localStorage.getItem('translucent') !== 'false',
+  );
+
+  const handleToggleTranslucent = useCallback(() => {
+    setTranslucent((prev) => {
+      const next = !prev;
+      localStorage.setItem('translucent', String(next));
+      return next;
+    });
+  }, []);
 
   // Document-level hover detection — handles the focused-window case.
   useEffect(() => {
@@ -318,7 +329,9 @@ export default function App() {
       style={{
         width: '100%',
         height: '100%',
-        backgroundColor: activeColors.background,
+        backgroundColor: translucent
+          ? hexToRgba(activeColors.background, 0.4)
+          : activeColors.background,
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
@@ -360,6 +373,7 @@ export default function App() {
               onChangeText={handleChangeText}
               width={width}
               colors={itemColors}
+              translucent={translucent}
             />
           );
         })}
@@ -373,6 +387,8 @@ export default function App() {
         onAddNote={handleAddNote}
         onThemeChange={handleThemeChange}
         hovered={hovered}
+        translucent={translucent}
+        onToggleTranslucent={handleToggleTranslucent}
       />
     </div>
   );
