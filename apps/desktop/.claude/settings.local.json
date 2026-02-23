@@ -5,7 +5,10 @@
       "WebFetch(domain:schema.tauri.app)",
       "WebSearch",
       "WebFetch(domain:github.com)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:crates.io)",
+      "WebFetch(domain:lib.rs)"
     ]
   }
 }

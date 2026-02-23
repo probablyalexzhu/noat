@@ -36,20 +36,20 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
+                use std::ptr::NonNull;
                 use std::sync::atomic::{AtomicBool, Ordering};
                 use std::sync::Arc;
 
-                use cocoa::base::id;
-                use cocoa::foundation::{NSPoint, NSRect};
-                use objc::{class, msg_send, sel, sel_impl};
+                use block2::RcBlock;
+                use objc2_app_kit::{NSEvent, NSEventMask, NSWindow};
+                use objc2_foundation::NSRect;
                 use tauri::Emitter;
                 use tauri::Manager;
 
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
                 let window = app.get_webview_window("main").unwrap();
-                let ns_window = window.ns_window().unwrap() as id;
-                let ns_window_ptr = ns_window as usize;
+                let ns_window_ptr = window.ns_window().unwrap() as *mut NSWindow;
 
                 let inside = Arc::new(AtomicBool::new(false));
                 let inside_clone = inside.clone();
@@ -58,10 +58,9 @@ pub fn run() {
                 // Global mouse monitor: fires when the app is NOT focused.
                 // Tracks cursor entering/leaving the window frame and emits
                 // Tauri events so the frontend can show/hide controls.
-                let block = block::ConcreteBlock::new(move |_event: id| unsafe {
-                    let mouse_loc: NSPoint = msg_send![class!(NSEvent), mouseLocation];
-                    let ns_win = ns_window_ptr as id;
-                    let frame: NSRect = msg_send![ns_win, frame];
+                let block = RcBlock::new(move |_event: NonNull<NSEvent>| {
+                    let mouse_loc = NSEvent::mouseLocation();
+                    let frame: NSRect = unsafe { (*ns_window_ptr).frame() };
 
                     let is_inside = mouse_loc.x >= frame.origin.x
                         && mouse_loc.x <= frame.origin.x + frame.size.width
@@ -76,20 +75,15 @@ pub fn run() {
                         let _ = app_handle.emit("mouse-left-window", ());
                     }
                 });
-                let block = block.copy();
 
-                unsafe {
-                    let mask: u64 = 1 << 5; // NSEventMaskMouseMoved
-                    let _: id = msg_send![
-                        class!(NSEvent),
-                        addGlobalMonitorForEventsMatchingMask: mask
-                        handler: &*block
-                    ];
-                }
+                let _monitor = NSEvent::addGlobalMonitorForEventsMatchingMask_handler(
+                    NSEventMask::MouseMoved,
+                    &block,
+                );
 
-                // Keep the block alive — the ObjC runtime retains its own copy,
-                // but forgetting ours avoids dropping captured state prematurely.
+                // Keep the monitor and block alive for the lifetime of the app.
                 std::mem::forget(block);
+                std::mem::forget(_monitor);
             }
 
             Ok(())
