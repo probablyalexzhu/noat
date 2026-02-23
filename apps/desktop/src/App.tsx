@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import {
   cleanupOldDeletedNotes,
   createNote,
@@ -23,6 +24,31 @@ export default function App() {
   const [width, setWidth] = useState(window.innerWidth);
   const [isInitialized, setIsInitialized] = useState(false);
   const [forceRefresh, setForceRefresh] = useState(0);
+  const [hovered, setHovered] = useState(false);
+
+  // Document-level hover detection — handles the focused-window case.
+  useEffect(() => {
+    const onEnter = () => setHovered(true);
+    const onLeave = () => setHovered(false);
+    document.documentElement.addEventListener('mouseenter', onEnter);
+    document.documentElement.addEventListener('mouseleave', onLeave);
+    return () => {
+      document.documentElement.removeEventListener('mouseenter', onEnter);
+      document.documentElement.removeEventListener('mouseleave', onLeave);
+    };
+  }, []);
+
+  // Native hover detection for unfocused window (macOS).
+  // The WKWebView only dispatches mouse events to the key window, so a Rust
+  // global monitor emits these events when the app is NOT focused.
+  useEffect(() => {
+    const unlistenEnter = listen('mouse-entered-window', () => setHovered(true));
+    const unlistenLeave = listen('mouse-left-window', () => setHovered(false));
+    return () => {
+      unlistenEnter.then((f) => f());
+      unlistenLeave.then((f) => f());
+    };
+  }, []);
 
   const noteThemes = useRef(new Map<string, ThemeMode>());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -346,6 +372,7 @@ export default function App() {
         onDeleteNote={handleDeleteNote}
         onAddNote={handleAddNote}
         onThemeChange={handleThemeChange}
+        hovered={hovered}
       />
     </div>
   );

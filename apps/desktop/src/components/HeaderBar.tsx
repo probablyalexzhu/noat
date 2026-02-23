@@ -1,11 +1,10 @@
-import { useState } from 'react';
-
 type HeaderBarProps = {
   dotColors: string[];
   activeIndex: number;
   onDeleteNote: () => void;
   onAddNote: () => void;
   showAddButton: boolean;
+  hovered: boolean;
 };
 
 const ACTIVE_OPACITY = 1;
@@ -17,16 +16,11 @@ export default function HeaderBar({
   onDeleteNote,
   onAddNote,
   showAddButton,
+  hovered,
 }: HeaderBarProps) {
-  const [hovered, setHovered] = useState(false);
-  const [minusHovered, setMinusHovered] = useState(false);
-  const [plusHovered, setPlusHovered] = useState(false);
-
   return (
     <div
       data-tauri-drag-region
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex',
         flexDirection: 'row',
@@ -41,8 +35,6 @@ export default function HeaderBar({
     >
       <button
         onClick={onDeleteNote}
-        onMouseEnter={() => setMinusHovered(true)}
-        onMouseLeave={() => setMinusHovered(false)}
         style={{
           background: 'none',
           border: 'none',
@@ -51,7 +43,7 @@ export default function HeaderBar({
           lineHeight: '20px',
           fontWeight: '300',
           color: dotColors[activeIndex] ?? '#888',
-          opacity: hovered ? (minusHovered ? 1 : 0.7) : 0,
+          opacity: hovered ? 0.7 : 0,
           transition: 'opacity 150ms ease',
           padding: '0 8px',
         }}
@@ -84,8 +76,6 @@ export default function HeaderBar({
 
       <button
         onClick={onAddNote}
-        onMouseEnter={() => setPlusHovered(true)}
-        onMouseLeave={() => setPlusHovered(false)}
         style={{
           background: 'none',
           border: 'none',
@@ -94,7 +84,7 @@ export default function HeaderBar({
           lineHeight: '20px',
           fontWeight: '300',
           color: dotColors[activeIndex] ?? '#888',
-          opacity: hovered && showAddButton ? (plusHovered ? 1 : 0.7) : 0,
+          opacity: hovered && showAddButton ? 0.7 : 0,
           transition: 'opacity 150ms ease',
           padding: '0 8px',
           pointerEvents: showAddButton ? 'auto' : 'none',

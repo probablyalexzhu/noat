@@ -9,6 +9,7 @@ type NoteControlsProps = {
   onDeleteNote: () => void;
   onAddNote: () => void;
   onThemeChange: (theme: ThemeMode) => void;
+  hovered: boolean;
 };
 
 export default function NoteControls({
@@ -18,6 +19,7 @@ export default function NoteControls({
   onDeleteNote,
   onAddNote,
   onThemeChange,
+  hovered,
 }: NoteControlsProps) {
   return (
     <div
@@ -35,6 +37,7 @@ export default function NoteControls({
         onDeleteNote={onDeleteNote}
         onAddNote={onAddNote}
         showAddButton={dotColors.length < 5}
+        hovered={hovered}
       />
 
       <div style={{ flex: 1 }} />
@@ -50,7 +53,7 @@ export default function NoteControls({
           pointerEvents: 'auto',
         }}
       >
-        <ThemePicker currentTheme={activeTheme} onSelectTheme={onThemeChange} />
+        <ThemePicker currentTheme={activeTheme} onSelectTheme={onThemeChange} hovered={hovered} />
       </div>
     </div>
   );

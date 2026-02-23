@@ -40,9 +40,10 @@ function OptionCircle({
 type ThemePickerProps = {
   currentTheme: ThemeMode;
   onSelectTheme: (theme: ThemeMode) => void;
+  hovered: boolean;
 };
 
-export default function ThemePicker({ currentTheme, onSelectTheme }: ThemePickerProps) {
+export default function ThemePicker({ currentTheme, onSelectTheme, hovered }: ThemePickerProps) {
   const colors = palettes[currentTheme];
   const [open, setOpen] = useState(false);
 
@@ -100,6 +101,8 @@ export default function ThemePicker({ currentTheme, onSelectTheme }: ThemePicker
             cursor: 'pointer',
             flexShrink: 0,
             zIndex: 20,
+            opacity: hovered || open ? 1 : 0,
+            transition: 'opacity 150ms ease',
           }}
         />
       </div>
