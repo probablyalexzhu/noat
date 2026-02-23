@@ -286,6 +286,8 @@ export default function App() {
       const noteId = noteIds[activeIndex];
       if (!noteId) return;
       noteThemes.current.set(noteId, theme);
+      setScrollBackground(null);
+      setForceRefresh((c) => c + 1);
       await updateNoteTheme(noteId, theme);
       handleNoteDirty(noteId);
     },
