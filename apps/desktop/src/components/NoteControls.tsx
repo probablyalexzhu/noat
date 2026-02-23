@@ -44,8 +44,9 @@ export default function NoteControls({
           display: 'flex',
           flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'center',
-          paddingBottom: 6,
+          justifyContent: 'flex-end',
+          paddingRight: 12,
+          paddingBottom: 10,
           pointerEvents: 'auto',
         }}
       >

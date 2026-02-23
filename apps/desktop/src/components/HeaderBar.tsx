@@ -19,6 +19,8 @@ export default function HeaderBar({
   showAddButton,
 }: HeaderBarProps) {
   const [hovered, setHovered] = useState(false);
+  const [minusHovered, setMinusHovered] = useState(false);
+  const [plusHovered, setPlusHovered] = useState(false);
 
   return (
     <div
@@ -39,6 +41,8 @@ export default function HeaderBar({
     >
       <button
         onClick={onDeleteNote}
+        onMouseEnter={() => setMinusHovered(true)}
+        onMouseLeave={() => setMinusHovered(false)}
         style={{
           background: 'none',
           border: 'none',
@@ -47,7 +51,7 @@ export default function HeaderBar({
           lineHeight: '20px',
           fontWeight: '300',
           color: dotColors[activeIndex] ?? '#888',
-          opacity: hovered ? 0.7 : 0,
+          opacity: hovered ? (minusHovered ? 1 : 0.7) : 0,
           transition: 'opacity 150ms ease',
           padding: '0 8px',
         }}
@@ -80,6 +84,8 @@ export default function HeaderBar({
 
       <button
         onClick={onAddNote}
+        onMouseEnter={() => setPlusHovered(true)}
+        onMouseLeave={() => setPlusHovered(false)}
         style={{
           background: 'none',
           border: 'none',
@@ -88,7 +94,7 @@ export default function HeaderBar({
           lineHeight: '20px',
           fontWeight: '300',
           color: dotColors[activeIndex] ?? '#888',
-          opacity: hovered && showAddButton ? 0.7 : 0,
+          opacity: hovered && showAddButton ? (plusHovered ? 1 : 0.7) : 0,
           transition: 'opacity 150ms ease',
           padding: '0 8px',
           pointerEvents: showAddButton ? 'auto' : 'none',
