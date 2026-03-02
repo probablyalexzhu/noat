@@ -195,6 +195,52 @@ export default function App() {
     init();
   }, []);
 
+  // Re-pull from Supabase on window focus to reconcile notes that were
+  // hard-deleted remotely (DELETE events are dropped by the user_id filter
+  // when REPLICA IDENTITY doesn't include user_id in the payload).
+  useEffect(() => {
+    const unlisten = getCurrentWindow().onFocusChanged(async ({ payload: focused }) => {
+      if (!focused || !isInitialized) return;
+
+      try {
+        await pull();
+        const notes = await getNotesByCreationOrder();
+        const freshIds = notes.map((n) => n.id);
+        const freshSet = new Set(freshIds);
+
+        notes.forEach((note, index) => {
+          if (!contentCache.current.has(note.id)) {
+            const theme = getValidThemeOrAssignDefault(note.theme, index);
+            initNoteInCache(note.id, note.content ?? '', theme);
+          }
+        });
+
+        for (const id of contentCache.current.keys()) {
+          if (!freshSet.has(id)) {
+            removeNoteFromCache(id);
+          }
+        }
+
+        if (freshIds.length === 0) {
+          const id = await createNote('Untitled', DEFAULT_THEME);
+          initNoteInCache(id, '', DEFAULT_THEME);
+          setNoteIds([id]);
+          setActiveIndex(0);
+        } else {
+          setNoteIds(freshIds);
+          setActiveIndex((prev) => Math.min(prev, freshIds.length - 1));
+          setForceRefresh((c) => c + 1);
+        }
+      } catch (error) {
+        console.error('Focus pull failed:', error);
+      }
+    });
+
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, [isInitialized]);
+
   // Listen to window resize
   useEffect(() => {
     const handleResize = () => {
@@ -249,13 +295,14 @@ export default function App() {
 
     const id = await createNote('Untitled', nextTheme);
     initNoteInCache(id, '', nextTheme);
+    handleNoteDirty(id);
 
     setNoteIds((prev) => {
       const next = [...prev, id];
       setActiveIndex(next.length - 1);
       return next;
     });
-  }, [noteIds, activeIndex]);
+  }, [noteIds, activeIndex, handleNoteDirty]);
 
   const handleDeleteNote = useCallback(async () => {
     const noteId = noteIds[activeIndex];
@@ -265,6 +312,7 @@ export default function App() {
 
     flushNote(noteId);
     await deleteNote(noteId);
+    handleNoteDirty(noteId);
     removeNoteFromCache(noteId);
 
     const remaining = noteIds.filter((id) => id !== noteId);
@@ -279,7 +327,7 @@ export default function App() {
       setNoteIds(remaining);
       setActiveIndex(newIndex);
     }
-  }, [noteIds, activeIndex, flushNote]);
+  }, [noteIds, activeIndex, flushNote, handleNoteDirty]);
 
   const handleThemeChange = useCallback(
     async (theme: ThemeMode) => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -15,7 +16,7 @@ import {
   getNotesByCreationOrder,
   updateNoteTheme,
 } from '@/lib/data/database';
-import { cleanupOldDeletedNotesRemote } from '@/lib/data/sync';
+import { cleanupOldDeletedNotesRemote, pull } from '@/lib/data/sync';
 import { palettes, themeOrder, type Colors, type ThemeMode } from '@/lib/theme';
 import NoteControls from '@/components/NoteControls';
 import NotePage from '@/components/NotePage';
@@ -118,36 +119,93 @@ export default function Index() {
     });
 
   useEffect(() => {
-    // Cleanup old deleted notes (local + cloud)
-    cleanupOldDeletedNotes(7);
-    cleanupOldDeletedNotesRemote(7).catch(console.error);
+    async function init() {
+      // Cleanup old deleted notes (local + cloud)
+      cleanupOldDeletedNotes(7);
+      cleanupOldDeletedNotesRemote(7).catch(console.error);
 
-    const notes = getNotesByCreationOrder();
+      // Pull remote notes and reconcile before loading local state
+      await pull().catch(console.error);
 
-    if (notes.length > 0) {
-      const ids = notes.map((n) => n.id);
+      const notes = getNotesByCreationOrder();
 
-      notes.forEach((note, index) => {
-        const content = note.content ?? '';
-        contentCache.current.set(note.id, content);
-        latestContents.current.set(note.id, content);
+      if (notes.length > 0) {
+        const ids = notes.map((n) => n.id);
 
-        const theme = getValidThemeOrAssignDefault(note.theme, index);
-        noteThemes.current.set(note.id, theme);
+        notes.forEach((note, index) => {
+          const content = note.content ?? '';
+          contentCache.current.set(note.id, content);
+          latestContents.current.set(note.id, content);
 
-        if (!note.theme || !themeOrder.includes(note.theme as ThemeMode)) {
-          updateNoteTheme(note.id, theme);
-        }
-      });
+          const theme = getValidThemeOrAssignDefault(note.theme, index);
+          noteThemes.current.set(note.id, theme);
 
-      setNoteIds(ids);
-    } else {
-      const id = createNote('Untitled', DEFAULT_THEME);
-      contentCache.current.set(id, '');
-      latestContents.current.set(id, '');
-      noteThemes.current.set(id, DEFAULT_THEME);
-      setNoteIds([id]);
+          if (!note.theme || !themeOrder.includes(note.theme as ThemeMode)) {
+            updateNoteTheme(note.id, theme);
+          }
+        });
+
+        setNoteIds(ids);
+      } else {
+        const id = createNote('Untitled', DEFAULT_THEME);
+        contentCache.current.set(id, '');
+        latestContents.current.set(id, '');
+        noteThemes.current.set(id, DEFAULT_THEME);
+        setNoteIds([id]);
+      }
     }
+
+    init();
+  }, []);
+
+  // Re-pull from Supabase when app returns to foreground to reconcile notes
+  // that were hard-deleted remotely (DELETE events are dropped by the user_id
+  // filter when REPLICA IDENTITY doesn't include user_id in the payload).
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (state) => {
+      if (state !== 'active') return;
+
+      try {
+        await pull();
+        const notes = getNotesByCreationOrder();
+        const freshIds = notes.map((n) => n.id);
+        const freshSet = new Set(freshIds);
+
+        notes.forEach((note, index) => {
+          if (!contentCache.current.has(note.id)) {
+            const theme = getValidThemeOrAssignDefault(note.theme, index);
+            contentCache.current.set(note.id, note.content ?? '');
+            latestContents.current.set(note.id, note.content ?? '');
+            noteThemes.current.set(note.id, theme);
+          }
+        });
+
+        for (const id of contentCache.current.keys()) {
+          if (!freshSet.has(id)) {
+            contentCache.current.delete(id);
+            latestContents.current.delete(id);
+            noteThemes.current.delete(id);
+          }
+        }
+
+        if (freshIds.length === 0) {
+          const id = createNote('Untitled', DEFAULT_THEME);
+          contentCache.current.set(id, '');
+          latestContents.current.set(id, '');
+          noteThemes.current.set(id, DEFAULT_THEME);
+          setNoteIds([id]);
+          setActiveIndex(0);
+        } else {
+          setNoteIds(freshIds);
+          setActiveIndex((prev) => Math.min(prev, freshIds.length - 1));
+          setThemeVersion((v) => v + 1);
+        }
+      } catch (error) {
+        console.error('Focus pull failed:', error);
+      }
+    });
+
+    return () => subscription.remove();
   }, []);
 
   const insets = useSafeAreaInsets();
@@ -198,6 +256,7 @@ export default function Index() {
     contentCache.current.set(id, '');
     latestContents.current.set(id, '');
     noteThemes.current.set(id, nextTheme);
+    handleNoteDirty(id);
 
     setThemeVersion((v) => v + 1);
     setNoteIds((prev) => {
@@ -205,7 +264,7 @@ export default function Index() {
       setActiveIndex(next.length - 1);
       return next;
     });
-  }, [noteIds, activeIndex]);
+  }, [noteIds, activeIndex, handleNoteDirty]);
 
   const handleDeleteNote = useCallback(() => {
     const noteId = noteIds[activeIndex];
@@ -215,6 +274,7 @@ export default function Index() {
 
     flushNote(noteId);
     deleteNote(noteId);
+    handleNoteDirty(noteId);
 
     contentCache.current.delete(noteId);
     latestContents.current.delete(noteId);
@@ -236,7 +296,7 @@ export default function Index() {
     }
 
     setThemeVersion((v) => v + 1);
-  }, [noteIds, activeIndex, flushNote]);
+  }, [noteIds, activeIndex, flushNote, handleNoteDirty]);
 
   const handleThemeChange = useCallback(
     (theme: ThemeMode) => {
