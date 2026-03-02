@@ -92,7 +92,8 @@ function NotePage({
           placeholder="Noat to self..."
           placeholderTextColor={colors.placeholder}
           textAlignVertical="top"
-          autoCorrect={false}
+          autoCorrect={true}
+          spellCheck={false}
           pointerEvents={isKeyboardVisible ? 'auto' : 'none'}
         />
       </Pressable>
