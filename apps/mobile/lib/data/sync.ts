@@ -1,6 +1,16 @@
-// sync.ts
+/**
+ * sync.ts — Supabase push/pull sync for local SQLite notes.
+ *
+ * pull() fetches remote notes and reconciles (upserts new, removes stale).
+ * push() sends unsynced local notes to Supabase in batches.
+ */
 import { db, getUserId, upsertNoteFromRemote } from './database';
 import { supabase } from '@noat/sync';
+import type { Note, RemoteNote } from '@noat/sync';
+
+function getTimestamp(): string {
+  return new Date().toLocaleTimeString('en-US', { hour12: false });
+}
 
 // ============================================
 // PULL — Fetch notes from Supabase to local DB
@@ -14,8 +24,7 @@ export async function pull(): Promise<void> {
     .is('deleted_at', null);
 
   if (error) {
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-    console.error(`[${time}] Pull failed:`, error.message);
+    console.error(`[${getTimestamp()}] Pull failed:`, error.message);
     return;
   }
 
@@ -28,7 +37,7 @@ export async function pull(): Promise<void> {
   }
 
   // Reconcile: remove local synced notes no longer on the server
-  const remoteIds = remoteNotes.map((n: any) => n.id);
+  const remoteIds = remoteNotes.map((n: RemoteNote) => n.id);
   if (remoteIds.length > 0) {
     const ph = remoteIds.map(() => '?').join(',');
     db.runSync(
@@ -41,8 +50,7 @@ export async function pull(): Promise<void> {
     ]);
   }
 
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-  console.log(`[${time}] Pulled ${remoteNotes.length} notes from Supabase`);
+  console.log(`[${getTimestamp()}] Pulled ${remoteNotes.length} notes from Supabase`);
 
   db.runSync(`UPDATE sync_log SET last_synced_at = ? WHERE table_name = 'notes'`, [
     new Date().toISOString(),
@@ -52,24 +60,23 @@ export async function pull(): Promise<void> {
 // ============================================
 // PUSH — Send unsynced notes to Supabase
 // ============================================
-export async function push() {
-  const rows = db.getAllSync('SELECT * FROM notes WHERE is_synced = 0');
+export async function push(): Promise<void> {
+  const rows = db.getAllSync<Note>('SELECT * FROM notes WHERE is_synced = 0');
   if (rows.length === 0) return;
 
-  const cleaned = rows.map(({ is_synced, ...rest }: any) => rest);
+  const cleaned = rows.map(({ is_synced, ...rest }) => rest);
 
   for (let i = 0; i < cleaned.length; i += 50) {
     const batch = cleaned.slice(i, i + 50);
     const { error } = await supabase.from('notes').upsert(batch, { onConflict: 'id' });
 
     if (error) {
-      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-      console.error(`[${time}] Push failed:`, error.message);
+      console.error(`[${getTimestamp()}] Push failed:`, error.message);
       return;
     }
   }
 
-  const ids = rows.map((r: any) => r.id);
+  const ids = rows.map((r) => r.id);
   const placeholders = ids.map(() => '?').join(',');
   db.runSync(`UPDATE notes SET is_synced = 1 WHERE id IN (${placeholders})`, ids);
 
@@ -77,8 +84,7 @@ export async function push() {
     new Date().toISOString(),
   ]);
 
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-  console.log(`[${time}] Pushed ${rows.length} notes`);
+  console.log(`[${getTimestamp()}] Pushed ${rows.length} notes`);
 }
 
 // ============================================

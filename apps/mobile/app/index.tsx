@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AppState,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -17,7 +16,13 @@ import {
   updateNoteTheme,
 } from '@/lib/data/database';
 import { cleanupOldDeletedNotesRemote, pull } from '@/lib/data/sync';
-import { palettes, themeOrder, type Colors, type ThemeMode } from '@/lib/theme';
+import {
+  getValidThemeOrDefault,
+  palettes,
+  themeOrder,
+  type Colors,
+  type ThemeMode,
+} from '@/lib/theme';
 import NoteControls from '@/components/NoteControls';
 import NotePage from '@/components/NotePage';
 import { useAutosave } from '@/hooks/useAutosave';
@@ -43,11 +48,8 @@ export default function Index() {
   const handleRemoteChange = useCallback(
     (noteId: string, event: 'INSERT' | 'UPDATE' | 'DELETE') => {
       if (event === 'DELETE') {
-        // Note was deleted remotely - remove from state
         setNoteIds((prev) => prev.filter((id) => id !== noteId));
-        contentCache.current.delete(noteId);
-        latestContents.current.delete(noteId);
-        noteThemes.current.delete(noteId);
+        removeNoteFromCache(noteId);
         return;
       }
 
@@ -60,12 +62,8 @@ export default function Index() {
         const ids = notes.map((n) => n.id);
 
         notes.forEach((note, index) => {
-          const content = note.content ?? '';
-          contentCache.current.set(note.id, content);
-          latestContents.current.set(note.id, content);
-
-          const theme = getValidThemeOrAssignDefault(note.theme, index);
-          noteThemes.current.set(note.id, theme);
+          const theme = getValidThemeOrDefault(note.theme, index);
+          initNoteInCache(note.id, note.content ?? '', theme);
         });
 
         setNoteIds(ids);
@@ -75,11 +73,8 @@ export default function Index() {
         const note = notes.find((n) => n.id === noteId);
 
         if (!note) {
-          // Note might have been soft-deleted
           setNoteIds((prev) => prev.filter((id) => id !== noteId));
-          contentCache.current.delete(noteId);
-          latestContents.current.delete(noteId);
-          noteThemes.current.delete(noteId);
+          removeNoteFromCache(noteId);
           return;
         }
 
@@ -100,14 +95,58 @@ export default function Index() {
     [noteIds],
   );
 
-  // Setup realtime sync with remote change callback
+  // Reconcile React state after pull() updates SQLite.
+  // Called by useRealtimeSync on app foreground to catch missed realtime events.
+  const handlePullCompleted = useCallback(() => {
+    const notes = getNotesByCreationOrder();
+    const freshIds = notes.map((n) => n.id);
+    const freshSet = new Set(freshIds);
+
+    notes.forEach((note, index) => {
+      if (!contentCache.current.has(note.id)) {
+        const theme = getValidThemeOrDefault(note.theme, index);
+        initNoteInCache(note.id, note.content ?? '', theme);
+      }
+    });
+
+    for (const id of contentCache.current.keys()) {
+      if (!freshSet.has(id)) {
+        removeNoteFromCache(id);
+      }
+    }
+
+    if (freshIds.length === 0) {
+      const id = createNote('Untitled', DEFAULT_THEME);
+      initNoteInCache(id, '', DEFAULT_THEME);
+      setNoteIds([id]);
+      setActiveIndex(0);
+    } else {
+      setNoteIds(freshIds);
+      setActiveIndex((prev) => Math.min(prev, freshIds.length - 1));
+      setThemeVersion((v) => v + 1);
+    }
+  }, []);
+
   const { handleNoteDirty } = useRealtimeSync({
     onRemoteChange: handleRemoteChange,
+    onPullCompleted: handlePullCompleted,
   });
 
   const { contentCache, latestContents, handleChangeText, flushNote } = useAutosave({
     onNoteDirty: handleNoteDirty,
   });
+
+  const initNoteInCache = (id: string, content: string, theme: ThemeMode) => {
+    contentCache.current.set(id, content);
+    latestContents.current.set(id, content);
+    noteThemes.current.set(id, theme);
+  };
+
+  const removeNoteFromCache = (id: string) => {
+    contentCache.current.delete(id);
+    latestContents.current.delete(id);
+    noteThemes.current.delete(id);
+  };
 
   const { isKeyboardVisible, registerInputRef, handleTouchStart, handleMomentumScrollEnd } =
     useKeyboardNavigation({
@@ -133,12 +172,8 @@ export default function Index() {
         const ids = notes.map((n) => n.id);
 
         notes.forEach((note, index) => {
-          const content = note.content ?? '';
-          contentCache.current.set(note.id, content);
-          latestContents.current.set(note.id, content);
-
-          const theme = getValidThemeOrAssignDefault(note.theme, index);
-          noteThemes.current.set(note.id, theme);
+          const theme = getValidThemeOrDefault(note.theme, index);
+          initNoteInCache(note.id, note.content ?? '', theme);
 
           if (!note.theme || !themeOrder.includes(note.theme as ThemeMode)) {
             updateNoteTheme(note.id, theme);
@@ -148,64 +183,12 @@ export default function Index() {
         setNoteIds(ids);
       } else {
         const id = createNote('Untitled', DEFAULT_THEME);
-        contentCache.current.set(id, '');
-        latestContents.current.set(id, '');
-        noteThemes.current.set(id, DEFAULT_THEME);
+        initNoteInCache(id, '', DEFAULT_THEME);
         setNoteIds([id]);
       }
     }
 
     init();
-  }, []);
-
-  // Re-pull from Supabase when app returns to foreground to reconcile notes
-  // that were hard-deleted remotely (DELETE events are dropped by the user_id
-  // filter when REPLICA IDENTITY doesn't include user_id in the payload).
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', async (state) => {
-      if (state !== 'active') return;
-
-      try {
-        await pull();
-        const notes = getNotesByCreationOrder();
-        const freshIds = notes.map((n) => n.id);
-        const freshSet = new Set(freshIds);
-
-        notes.forEach((note, index) => {
-          if (!contentCache.current.has(note.id)) {
-            const theme = getValidThemeOrAssignDefault(note.theme, index);
-            contentCache.current.set(note.id, note.content ?? '');
-            latestContents.current.set(note.id, note.content ?? '');
-            noteThemes.current.set(note.id, theme);
-          }
-        });
-
-        for (const id of contentCache.current.keys()) {
-          if (!freshSet.has(id)) {
-            contentCache.current.delete(id);
-            latestContents.current.delete(id);
-            noteThemes.current.delete(id);
-          }
-        }
-
-        if (freshIds.length === 0) {
-          const id = createNote('Untitled', DEFAULT_THEME);
-          contentCache.current.set(id, '');
-          latestContents.current.set(id, '');
-          noteThemes.current.set(id, DEFAULT_THEME);
-          setNoteIds([id]);
-          setActiveIndex(0);
-        } else {
-          setNoteIds(freshIds);
-          setActiveIndex((prev) => Math.min(prev, freshIds.length - 1));
-          setThemeVersion((v) => v + 1);
-        }
-      } catch (error) {
-        console.error('Focus pull failed:', error);
-      }
-    });
-
-    return () => subscription.remove();
   }, []);
 
   const insets = useSafeAreaInsets();
@@ -229,16 +212,6 @@ export default function Index() {
   const contentPaddingTop = insets.top + DOT_INDICATOR_HEIGHT;
   const contentPaddingBottom = insets.bottom + BOTTOM_BAR_HEIGHT;
 
-  function getValidThemeOrAssignDefault(
-    themeValue: string | null,
-    fallbackIndex: number,
-  ): ThemeMode {
-    if (themeValue && themeOrder.includes(themeValue as ThemeMode)) {
-      return themeValue as ThemeMode;
-    }
-    return themeOrder[fallbackIndex % themeOrder.length];
-  }
-
   function getThemeForNote(noteId: string | undefined): ThemeMode {
     if (!noteId) {
       return DEFAULT_THEME;
@@ -252,10 +225,7 @@ export default function Index() {
     const nextTheme = themeOrder[(currentThemeIndex + 1) % themeOrder.length];
 
     const id = createNote('Untitled', nextTheme);
-
-    contentCache.current.set(id, '');
-    latestContents.current.set(id, '');
-    noteThemes.current.set(id, nextTheme);
+    initNoteInCache(id, '', nextTheme);
     handleNoteDirty(id);
 
     setThemeVersion((v) => v + 1);
@@ -275,18 +245,13 @@ export default function Index() {
     flushNote(noteId);
     deleteNote(noteId);
     handleNoteDirty(noteId);
-
-    contentCache.current.delete(noteId);
-    latestContents.current.delete(noteId);
-    noteThemes.current.delete(noteId);
+    removeNoteFromCache(noteId);
 
     const remaining = noteIds.filter((id) => id !== noteId);
 
     if (remaining.length === 0) {
       const newId = createNote('Untitled', DEFAULT_THEME);
-      contentCache.current.set(newId, '');
-      latestContents.current.set(newId, '');
-      noteThemes.current.set(newId, DEFAULT_THEME);
+      initNoteInCache(newId, '', DEFAULT_THEME);
       setNoteIds([newId]);
       setActiveIndex(0);
     } else {

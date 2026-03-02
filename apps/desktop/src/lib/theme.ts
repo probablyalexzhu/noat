@@ -55,6 +55,17 @@ export const palettes: Record<ThemeMode, Colors> = {
 
 export const themeOrder: ThemeMode[] = ['paper', 'forest', 'ios', 'dark', 'cyberpunk'];
 
+/** Return the stored theme if valid, otherwise assign one deterministically by index. */
+export function getValidThemeOrDefault(
+  themeValue: string | null,
+  fallbackIndex: number,
+): ThemeMode {
+  if (themeValue && themeOrder.includes(themeValue as ThemeMode)) {
+    return themeValue as ThemeMode;
+  }
+  return themeOrder[fallbackIndex % themeOrder.length];
+}
+
 /** Convert '#rrggbb' to 'rgba(r, g, b, alpha)'. */
 export function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);

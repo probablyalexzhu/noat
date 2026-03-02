@@ -1,7 +1,11 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@noat/sync';
-import { db, getUserId, getDeviceId } from './database';
+import { db, getUserId } from './database';
 import type { RemoteNote, UpdatedAtResult, UpsertResult } from '@noat/sync';
+
+function getTimestamp(): string {
+  return new Date().toLocaleTimeString('en-US', { hour12: false });
+}
 
 /**
  * Upsert a remote note into local SQLite database.
@@ -38,7 +42,7 @@ export function upsertRemoteNote(remoteNote: RemoteNote): UpsertResult {
       cols.map((c) => remoteNote[c as keyof RemoteNote]),
     );
 
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const time = getTimestamp();
     console.log(`[${time}] Realtime upserted: ${remoteNote.id}`);
     return { success: true, noteId: remoteNote.id };
   } catch (error) {
@@ -76,7 +80,7 @@ export function subscribeToNotes(
         filter: `user_id=eq.${userId}`,
       },
       (payload) => {
-        const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+        const time = getTimestamp();
         const noteId = (payload.new as RemoteNote)?.id || (payload.old as Partial<RemoteNote>)?.id;
         const remoteDeviceId =
           (payload.new as RemoteNote)?.device_id || (payload.old as Partial<RemoteNote>)?.device_id;
@@ -101,7 +105,7 @@ export function subscribeToNotes(
       },
     )
     .subscribe((status) => {
-      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+      const time = getTimestamp();
       console.log(`[${time}] Realtime subscription status: ${status}`);
       onStatusChange?.(status);
     });

@@ -1,13 +1,18 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { AppState } from 'react-native';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { push } from '@/lib/data/sync';
+import { pull, push } from '@/lib/data/sync';
 import { subscribeToNotes } from '@/lib/data/realtime';
 
 const PUSH_DEBOUNCE_MS = 300;
+const MAX_PUSH_RETRIES = 3;
 const MAX_SUBSCRIBE_RETRIES = 5;
 const RETRY_BASE_DELAY_MS = 1000;
 const RETRY_MAX_DELAY_MS = 30000;
+
+function getTimestamp(): string {
+  return new Date().toLocaleTimeString('en-US', { hour12: false });
+}
 
 /**
  * Realtime cloud sync with Supabase postgres_changes.
@@ -37,9 +42,9 @@ const RETRY_MAX_DELAY_MS = 30000;
 export function useRealtimeSync(options?: {
   debounceMs?: number;
   onRemoteChange?: (noteId: string, event: 'INSERT' | 'UPDATE' | 'DELETE') => void;
-  onNoteDirty?: (noteId: string) => void;
+  onPullCompleted?: () => void;
 }) {
-  const { debounceMs = PUSH_DEBOUNCE_MS, onRemoteChange, onNoteDirty } = options ?? {};
+  const { debounceMs = PUSH_DEBOUNCE_MS, onRemoteChange, onPullCompleted } = options ?? {};
 
   const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPushingRef = useRef(false);
@@ -47,7 +52,6 @@ export function useRealtimeSync(options?: {
   const pushRetryCountRef = useRef(0);
   const subscribeRetryCountRef = useRef(0);
   const subscribeRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const maxRetries = 3;
 
   // Clear push timer
   const clearPushTimer = useCallback(() => {
@@ -62,20 +66,17 @@ export function useRealtimeSync(options?: {
     if (isPushingRef.current) return;
     isPushingRef.current = true;
 
-    const getTime = () => new Date().toLocaleTimeString('en-US', { hour12: false });
-
     try {
       await push();
-      pushRetryCountRef.current = 0; // Reset on success
-      console.log(`[${getTime()}] Push complete ✓`);
+      pushRetryCountRef.current = 0;
     } catch (error) {
-      console.error(`[${getTime()}] Push failed:`, error);
+      console.error(`[${getTimestamp()}] Push failed:`, error);
 
-      if (pushRetryCountRef.current < maxRetries) {
+      if (pushRetryCountRef.current < MAX_PUSH_RETRIES) {
         pushRetryCountRef.current++;
-        const delay = Math.min(1000 * Math.pow(2, pushRetryCountRef.current), 30000);
-        console.log(
-          `Retrying push in ${delay}ms (attempt ${pushRetryCountRef.current}/${maxRetries})`,
+        const delay = Math.min(
+          RETRY_BASE_DELAY_MS * Math.pow(2, pushRetryCountRef.current),
+          RETRY_MAX_DELAY_MS,
         );
 
         setTimeout(() => {
@@ -98,11 +99,13 @@ export function useRealtimeSync(options?: {
     }, debounceMs);
   }, [debounceMs, clearPushTimer, triggerPush]);
 
-  // Store callback in ref to avoid recreating subscription when callback changes
+  // Store callbacks in refs to avoid recreating subscription when they change
   const onRemoteChangeRef = useRef(onRemoteChange);
+  const onPullCompletedRef = useRef(onPullCompleted);
   useEffect(() => {
     onRemoteChangeRef.current = onRemoteChange;
-  }, [onRemoteChange]);
+    onPullCompletedRef.current = onPullCompleted;
+  }, [onRemoteChange, onPullCompleted]);
 
   // Handle dirty note notifications - schedule push when local changes occur
   const handleNoteDirty = useCallback(
@@ -164,17 +167,23 @@ export function useRealtimeSync(options?: {
     // Setup realtime subscription (only once on mount)
     setupRealtime();
 
-    // Listen for app state changes
-    const handleAppStateChange = (state: string) => {
+    // Listen for app state changes — consolidates all foreground/background
+    // sync logic (reconnect, push, pull) in one place.
+    const handleAppStateChange = async (state: string) => {
       if (state === 'background') {
-        // Push immediately before backgrounding
         clearPushTimer();
         triggerPush();
       } else if (state === 'active') {
-        // Reconnect realtime on foreground (fresh attempt)
         subscribeRetryCountRef.current = 0;
         setupRealtime();
-        triggerPush(); // Also push any pending changes
+        triggerPush();
+
+        try {
+          await pull();
+          onPullCompletedRef.current?.();
+        } catch (error) {
+          console.error('Focus pull failed:', error);
+        }
       }
     };
 

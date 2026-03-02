@@ -1,9 +1,10 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { push } from '@/lib/sync';
+import { push, pull } from '@/lib/sync';
 import { subscribeToNotes } from '@/lib/realtime';
 import { waitForDatabase } from '@/lib/database';
 import { getTimestamp } from '@/lib/utils';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const PUSH_DEBOUNCE_MS = 300;
 const MAX_PUSH_RETRIES = 3;
@@ -38,8 +39,9 @@ const SUPABASE_INIT_DELAY_MS = 500;
 export function useRealtimeSync(options?: {
   debounceMs?: number;
   onRemoteChange?: (noteId: string, event: 'INSERT' | 'UPDATE' | 'DELETE') => void;
+  onPullCompleted?: () => void;
 }) {
-  const { debounceMs = PUSH_DEBOUNCE_MS, onRemoteChange } = options ?? {};
+  const { debounceMs = PUSH_DEBOUNCE_MS, onRemoteChange, onPullCompleted } = options ?? {};
 
   const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPushingRef = useRef(false);
@@ -94,11 +96,13 @@ export function useRealtimeSync(options?: {
     }, debounceMs);
   }, [debounceMs, clearPushTimer, triggerPush]);
 
-  // Store callback in ref to avoid recreating subscription when callback changes
+  // Store callbacks in refs to avoid recreating subscription when they change
   const onRemoteChangeRef = useRef(onRemoteChange);
+  const onPullCompletedRef = useRef(onPullCompleted);
   useEffect(() => {
     onRemoteChangeRef.current = onRemoteChange;
-  }, [onRemoteChange]);
+    onPullCompletedRef.current = onPullCompleted;
+  }, [onRemoteChange, onPullCompleted]);
 
   // Handle dirty note notifications - schedule push when local changes occur
   const handleNoteDirty = useCallback(
@@ -176,8 +180,27 @@ export function useRealtimeSync(options?: {
       triggerPush();
     }, SUPABASE_INIT_DELAY_MS);
 
+    // Re-pull from Supabase on window focus to reconcile notes that were
+    // hard-deleted remotely (DELETE events are dropped by the user_id filter
+    // when REPLICA IDENTITY doesn't include user_id in the payload).
+    const unlisten = getCurrentWindow().onFocusChanged(async ({ payload: focused }) => {
+      if (!focused) return;
+
+      subscribeRetryCountRef.current = 0;
+      setupRealtime().catch(console.error);
+      triggerPush();
+
+      try {
+        await pull();
+        onPullCompletedRef.current?.();
+      } catch (error) {
+        console.error(`[${getTimestamp()}] Focus pull failed:`, error);
+      }
+    });
+
     return () => {
       clearTimeout(timer);
+      unlisten.then((f) => f());
       if (realtimeChannelRef.current) realtimeChannelRef.current.unsubscribe();
       if (subscribeRetryTimerRef.current) clearTimeout(subscribeRetryTimerRef.current);
       clearPushTimer();
