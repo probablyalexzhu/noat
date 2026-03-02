@@ -4,7 +4,10 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { push } from '@/lib/data/sync';
 import { subscribeToNotes } from '@/lib/data/realtime';
 
-const PUSH_DEBOUNCE_MS = 1500;
+const PUSH_DEBOUNCE_MS = 300;
+const MAX_SUBSCRIBE_RETRIES = 5;
+const RETRY_BASE_DELAY_MS = 1000;
+const RETRY_MAX_DELAY_MS = 30000;
 
 /**
  * Realtime cloud sync with Supabase postgres_changes.
@@ -42,6 +45,8 @@ export function useRealtimeSync(options?: {
   const isPushingRef = useRef(false);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const pushRetryCountRef = useRef(0);
+  const subscribeRetryCountRef = useRef(0);
+  const subscribeRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxRetries = 3;
 
   // Clear push timer
@@ -109,6 +114,12 @@ export function useRealtimeSync(options?: {
 
   // Setup realtime subscription (stable, doesn't depend on callback)
   const setupRealtime = useCallback(() => {
+    // Clear any pending retry
+    if (subscribeRetryTimerRef.current) {
+      clearTimeout(subscribeRetryTimerRef.current);
+      subscribeRetryTimerRef.current = null;
+    }
+
     // Cleanup existing subscription
     if (realtimeChannelRef.current) {
       realtimeChannelRef.current.unsubscribe();
@@ -123,8 +134,24 @@ export function useRealtimeSync(options?: {
           onRemoteChangeRef.current?.(noteId, event);
         },
         (status) => {
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.warn(`Subscription ${status}, will retry on next app foreground`);
+          if (status === 'SUBSCRIBED') {
+            subscribeRetryCountRef.current = 0;
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            if (subscribeRetryCountRef.current < MAX_SUBSCRIBE_RETRIES) {
+              subscribeRetryCountRef.current++;
+              const delay = Math.min(
+                RETRY_BASE_DELAY_MS * Math.pow(2, subscribeRetryCountRef.current),
+                RETRY_MAX_DELAY_MS,
+              );
+              console.warn(
+                `Subscription ${status} — retrying in ${delay}ms (attempt ${subscribeRetryCountRef.current}/${MAX_SUBSCRIBE_RETRIES})`,
+              );
+              subscribeRetryTimerRef.current = setTimeout(() => {
+                setupRealtime();
+              }, delay);
+            } else {
+              console.error(`Subscription failed after ${MAX_SUBSCRIBE_RETRIES} retries`);
+            }
           }
         },
       );
@@ -144,7 +171,8 @@ export function useRealtimeSync(options?: {
         clearPushTimer();
         triggerPush();
       } else if (state === 'active') {
-        // Reconnect realtime on foreground
+        // Reconnect realtime on foreground (fresh attempt)
+        subscribeRetryCountRef.current = 0;
         setupRealtime();
         triggerPush(); // Also push any pending changes
       }
@@ -158,6 +186,7 @@ export function useRealtimeSync(options?: {
     // Cleanup
     return () => {
       if (realtimeChannelRef.current) realtimeChannelRef.current.unsubscribe();
+      if (subscribeRetryTimerRef.current) clearTimeout(subscribeRetryTimerRef.current);
       clearPushTimer();
       sub.remove();
     };

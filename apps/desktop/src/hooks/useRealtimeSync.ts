@@ -5,8 +5,9 @@ import { subscribeToNotes } from '@/lib/realtime';
 import { waitForDatabase } from '@/lib/database';
 import { getTimestamp } from '@/lib/utils';
 
-const PUSH_DEBOUNCE_MS = 1500;
+const PUSH_DEBOUNCE_MS = 300;
 const MAX_PUSH_RETRIES = 3;
+const MAX_SUBSCRIBE_RETRIES = 5;
 const RETRY_BASE_DELAY_MS = 1000;
 const RETRY_MAX_DELAY_MS = 30000;
 const SUPABASE_INIT_DELAY_MS = 500;
@@ -44,6 +45,8 @@ export function useRealtimeSync(options?: {
   const isPushingRef = useRef(false);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const pushRetryCountRef = useRef(0);
+  const subscribeRetryCountRef = useRef(0);
+  const subscribeRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Clear push timer
   const clearPushTimer = useCallback(() => {
@@ -115,6 +118,12 @@ export function useRealtimeSync(options?: {
       return;
     }
 
+    // Clear any pending retry
+    if (subscribeRetryTimerRef.current) {
+      clearTimeout(subscribeRetryTimerRef.current);
+      subscribeRetryTimerRef.current = null;
+    }
+
     // Cleanup existing subscription
     if (realtimeChannelRef.current) {
       realtimeChannelRef.current.unsubscribe();
@@ -128,10 +137,26 @@ export function useRealtimeSync(options?: {
           onRemoteChangeRef.current?.(noteId, event);
         },
         (status) => {
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.warn(
-              `[${getTimestamp()}] Subscription ${status} - will retry on next app reload`,
-            );
+          if (status === 'SUBSCRIBED') {
+            subscribeRetryCountRef.current = 0;
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            if (subscribeRetryCountRef.current < MAX_SUBSCRIBE_RETRIES) {
+              subscribeRetryCountRef.current++;
+              const delay = Math.min(
+                RETRY_BASE_DELAY_MS * Math.pow(2, subscribeRetryCountRef.current),
+                RETRY_MAX_DELAY_MS,
+              );
+              console.warn(
+                `[${getTimestamp()}] Subscription ${status} — retrying in ${delay}ms (attempt ${subscribeRetryCountRef.current}/${MAX_SUBSCRIBE_RETRIES})`,
+              );
+              subscribeRetryTimerRef.current = setTimeout(() => {
+                setupRealtime().catch(console.error);
+              }, delay);
+            } else {
+              console.error(
+                `[${getTimestamp()}] Subscription failed after ${MAX_SUBSCRIBE_RETRIES} retries`,
+              );
+            }
           }
         },
       );
@@ -154,6 +179,7 @@ export function useRealtimeSync(options?: {
     return () => {
       clearTimeout(timer);
       if (realtimeChannelRef.current) realtimeChannelRef.current.unsubscribe();
+      if (subscribeRetryTimerRef.current) clearTimeout(subscribeRetryTimerRef.current);
       clearPushTimer();
     };
     // setupRealtime is stable (no deps), so it won't cause re-runs
