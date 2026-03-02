@@ -12,6 +12,7 @@
     "desktop": "npm run dev --workspace=apps/desktop",
     "format": "prettier --write .",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspace=packages/sync",
     "lint": "npm run lint --workspaces --if-present",
     "prepare": "husky"
   },
