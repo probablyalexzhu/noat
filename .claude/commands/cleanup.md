@@ -37,36 +37,43 @@ If no focus area is given, clean up the entire project.
 After reading everything, compile a structured audit. Identify every instance of:
 
 ### 2a. Bugs
+
 - Unreachable code (dead branches after early returns)
 - Logic errors (off-by-one, wrong operators like `>` vs `<`)
 - Resource leaks (unsubscribed listeners, uncleared timers, unclosed connections)
 - Race conditions or missing null checks
 
 ### 2b. Duplication
+
 - Identical or near-identical code blocks across files
 - Copy-pasted utility patterns (timestamp formatting, polling loops, upsert SQL, etc.)
 - Repeated multi-line sequences that should be a single helper call
 
 ### 2c. Magic numbers and unnamed constants
+
 - Hardcoded numeric literals (timeouts, sizes, limits, indices)
 - Hardcoded string literals that represent configuration
 - Threshold values without explanation
 
 ### 2d. Dead code
+
 - Unused functions, variables, imports, types, or exports
 - Commented-out code blocks (unless marked with a TODO or clear reason to keep)
 - Unreachable branches
 - Backend commands never called from frontend (and vice versa)
 
 ### 2e. Loose typing
+
 - `any` types that could be narrowed
 - Missing return types on exported functions
 - Untyped destructuring where types exist
 
 ### 2f. Missing file-level documentation
+
 - Files without a header comment explaining their purpose and public API
 
 ### 2g. Stale or missing project docs
+
 - `CLAUDE.md` that doesn't reflect current file structure or conventions
 - `README.md` that is outdated, incomplete, or missing
 
