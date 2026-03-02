@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { pull, push } from '@/lib/data/sync';
 import { subscribeToNotes } from '@/lib/data/realtime';
+import { supabase } from '@noat/sync';
 
 const PUSH_DEBOUNCE_MS = 300;
 const MAX_PUSH_RETRIES = 3;
@@ -123,9 +124,10 @@ export function useRealtimeSync(options?: {
       subscribeRetryTimerRef.current = null;
     }
 
-    // Cleanup existing subscription
+    // Cleanup existing subscription — removeChannel() tears down the underlying
+    // WebSocket when no channels remain, ensuring a fresh connection on re-subscribe.
     if (realtimeChannelRef.current) {
-      realtimeChannelRef.current.unsubscribe();
+      supabase.removeChannel(realtimeChannelRef.current);
       realtimeChannelRef.current = null;
     }
 
@@ -194,7 +196,7 @@ export function useRealtimeSync(options?: {
 
     // Cleanup
     return () => {
-      if (realtimeChannelRef.current) realtimeChannelRef.current.unsubscribe();
+      if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
       if (subscribeRetryTimerRef.current) clearTimeout(subscribeRetryTimerRef.current);
       clearPushTimer();
       sub.remove();

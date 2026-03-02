@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { push, pull } from '@/lib/sync';
 import { subscribeToNotes } from '@/lib/realtime';
+import { supabase } from '@noat/sync';
 import { waitForDatabase } from '@/lib/database';
 import { getTimestamp } from '@/lib/utils';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -128,9 +129,10 @@ export function useRealtimeSync(options?: {
       subscribeRetryTimerRef.current = null;
     }
 
-    // Cleanup existing subscription
+    // Cleanup existing subscription — removeChannel() tears down the underlying
+    // WebSocket when no channels remain, ensuring a fresh connection on re-subscribe.
     if (realtimeChannelRef.current) {
-      realtimeChannelRef.current.unsubscribe();
+      supabase.removeChannel(realtimeChannelRef.current);
       realtimeChannelRef.current = null;
     }
 
@@ -201,7 +203,7 @@ export function useRealtimeSync(options?: {
     return () => {
       clearTimeout(timer);
       unlisten.then((f) => f());
-      if (realtimeChannelRef.current) realtimeChannelRef.current.unsubscribe();
+      if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
       if (subscribeRetryTimerRef.current) clearTimeout(subscribeRetryTimerRef.current);
       clearPushTimer();
     };
