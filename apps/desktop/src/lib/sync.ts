@@ -66,12 +66,27 @@ export async function pull(): Promise<void> {
     return;
   }
 
-  if (!remoteNotes || remoteNotes.length === 0) {
+  if (!remoteNotes) {
     return;
   }
 
   for (const note of remoteNotes) {
     await upsertNoteFromRemote(note as RemoteNote);
+  }
+
+  // Reconcile: remove local synced notes no longer on the server
+  const remoteIds = remoteNotes.map((n: RemoteNote) => n.id);
+  if (remoteIds.length > 0) {
+    const ph = remoteIds.map(() => '?').join(',');
+    await db.execute(
+      `DELETE FROM notes WHERE user_id = ? AND is_synced = 1 AND deleted_at IS NULL AND id NOT IN (${ph})`,
+      [userId, ...remoteIds],
+    );
+  } else {
+    await db.execute(
+      'DELETE FROM notes WHERE user_id = ? AND is_synced = 1 AND deleted_at IS NULL',
+      [userId],
+    );
   }
 
   console.log(`[${getTimestamp()}] Pulled ${remoteNotes.length} notes from Supabase`);

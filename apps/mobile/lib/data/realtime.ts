@@ -94,6 +94,7 @@ export function subscribeToNotes(
         } else if (payload.eventType === 'DELETE') {
           const deletedId = (payload.old as Partial<RemoteNote>)?.id;
           if (deletedId) {
+            db.runSync('DELETE FROM notes WHERE id = ?', [deletedId]);
             onNoteChanged(deletedId, 'DELETE');
           }
         }

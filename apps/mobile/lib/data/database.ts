@@ -156,4 +156,20 @@ export function cleanupOldDeletedNotes(daysOld: number = 7): void {
   ]);
 }
 
+/**
+ * Upsert a remote note into local SQLite, marking it as synced.
+ * Used by pull() for server reconciliation and realtime single-note upserts.
+ */
+export function upsertNoteFromRemote(note: Record<string, unknown>): void {
+  const cols = Object.keys(note);
+  const placeholders = cols.map(() => '?').join(',');
+  const updates = cols.map((c) => `${c} = excluded.${c}`).join(',');
+  db.runSync(
+    `INSERT INTO notes (${cols.join(',')}, is_synced)
+     VALUES (${placeholders}, 1)
+     ON CONFLICT(id) DO UPDATE SET ${updates}, is_synced = 1`,
+    cols.map((c) => note[c]),
+  );
+}
+
 export { db };

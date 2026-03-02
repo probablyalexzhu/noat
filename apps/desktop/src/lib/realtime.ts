@@ -79,6 +79,7 @@ export async function subscribeToNotes(
         } else if (payload.eventType === 'DELETE') {
           const deletedId = (payload.old as Partial<RemoteNote>)?.id;
           if (deletedId) {
+            await db.execute('DELETE FROM notes WHERE id = ?', [deletedId]);
             onNoteChanged(deletedId, 'DELETE');
           }
         }

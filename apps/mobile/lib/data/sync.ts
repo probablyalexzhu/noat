@@ -1,6 +1,53 @@
 // sync.ts
-import { db, getDeviceId } from './database';
+import { db, getUserId, upsertNoteFromRemote } from './database';
 import { supabase } from '@noat/sync';
+
+// ============================================
+// PULL — Fetch notes from Supabase to local DB
+// ============================================
+export async function pull(): Promise<void> {
+  const userId = getUserId();
+  const { data: remoteNotes, error } = await supabase
+    .from('notes')
+    .select('*')
+    .eq('user_id', userId)
+    .is('deleted_at', null);
+
+  if (error) {
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    console.error(`[${time}] Pull failed:`, error.message);
+    return;
+  }
+
+  if (!remoteNotes) {
+    return;
+  }
+
+  for (const note of remoteNotes) {
+    upsertNoteFromRemote(note);
+  }
+
+  // Reconcile: remove local synced notes no longer on the server
+  const remoteIds = remoteNotes.map((n: any) => n.id);
+  if (remoteIds.length > 0) {
+    const ph = remoteIds.map(() => '?').join(',');
+    db.runSync(
+      `DELETE FROM notes WHERE user_id = ? AND is_synced = 1 AND deleted_at IS NULL AND id NOT IN (${ph})`,
+      [userId, ...remoteIds],
+    );
+  } else {
+    db.runSync('DELETE FROM notes WHERE user_id = ? AND is_synced = 1 AND deleted_at IS NULL', [
+      userId,
+    ]);
+  }
+
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  console.log(`[${time}] Pulled ${remoteNotes.length} notes from Supabase`);
+
+  db.runSync(`UPDATE sync_log SET last_synced_at = ? WHERE table_name = 'notes'`, [
+    new Date().toISOString(),
+  ]);
+}
 
 // ============================================
 // PUSH — Send unsynced notes to Supabase
