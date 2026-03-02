@@ -54,4 +54,23 @@ Per-workspace (run from root):
 - `npm run format --workspace=apps/desktop` — format desktop
 - `npm run typecheck --workspace=apps/desktop` — type-check desktop
 
+- `npm test` — run sync integration tests (packages/sync)
+
 See each app's `CLAUDE.md` for app-specific dev/build commands.
+
+## Sync architecture notes
+
+**Supabase realtime DELETE events are silently dropped** when the table uses default REPLICA IDENTITY. DELETE payloads only contain PK columns (`id`), not `user_id`, so the `user_id=eq.${userId}` filter never matches. Workaround: `pull()` reconciles on focus/foreground, and the realtime handler manually deletes from local SQLite on DELETE events it does receive.
+
+**Circular hook dependency.** `useRealtimeSync` and `useAutosave` depend on each other (`useAutosave` needs `handleNoteDirty` from realtime; realtime's `onRemoteChange` callback needs `contentCache` from autosave). This forces a specific declaration order in App.tsx/index.tsx where callbacks are defined before the hooks that provide their dependencies. The callbacks access refs via closure (safe at runtime) but can't list them in `useCallback` dep arrays (TypeScript TDZ errors). The resulting exhaustive-deps lint warnings are expected and acceptable.
+
+**`useRealtimeSync` owns all sync lifecycle**: subscribe, push debounce, pull on focus/foreground, and auto-resubscribe on channel error. The main component passes `onRemoteChange` and `onPullCompleted` callbacks to react to sync events without owning the listeners.
+
+## Cross-platform consistency
+
+When adding logic that applies to both desktop and mobile, keep the implementations parallel:
+
+- Extract shared pure functions to `lib/` (e.g., `getValidThemeOrDefault` in `lib/theme`)
+- Use the same cache helper pattern (`initNoteInCache`/`removeNoteFromCache`) in both apps
+- Mobile uses synchronous SQLite (expo-sqlite); desktop uses async (tauri plugin-sql) — same logic, different await patterns
+- Mobile `AppState` ≈ Desktop `getCurrentWindow().onFocusChanged()` for foreground detection
