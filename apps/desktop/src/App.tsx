@@ -41,7 +41,7 @@ export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [width, setWidth] = useState(window.innerWidth);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [forceRefresh, setForceRefresh] = useState(0);
+  const [, setForceRefresh] = useState(0);
   const [hovered, setHovered] = useState(false);
   const [translucent, setTranslucent] = useState(
     () => localStorage.getItem('translucent') !== 'false',
@@ -428,13 +428,14 @@ export default function App() {
 
           return (
             <NotePage
-              key={`${id}-${forceRefresh}`}
+              key={id}
               noteId={id}
               content={cachedContent ?? ''}
               onChangeText={handleChangeText}
               width={width}
               colors={itemColors}
               translucent={translucent}
+              isActive={id === activeNoteId}
             />
           );
         })}

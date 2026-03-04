@@ -10,6 +10,7 @@ type NotePageProps = {
   width: number;
   colors: Colors;
   translucent: boolean;
+  isActive: boolean;
 };
 
 /**
@@ -25,6 +26,7 @@ function NotePage({
   width,
   colors,
   translucent,
+  isActive,
 }: NotePageProps) {
   const [content, setContent] = useState(externalContent);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -33,6 +35,18 @@ function NotePage({
   useEffect(() => {
     setContent(externalContent);
   }, [externalContent]);
+
+  // Focus textarea when this note becomes active or the window regains focus.
+  // Keeps the cursor in the editor after keyboard-shortcut reopen, dot
+  // navigation, and pull-triggered re-renders.
+  useEffect(() => {
+    if (!isActive) return;
+    textareaRef.current?.focus();
+
+    const handleWindowFocus = () => textareaRef.current?.focus();
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
+  }, [isActive]);
 
   const handleChange = (text: string) => {
     setContent(text);
