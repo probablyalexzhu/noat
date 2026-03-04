@@ -50,6 +50,7 @@ export function useRealtimeSync(options?: {
   const pushRetryCountRef = useRef(0);
   const subscribeRetryCountRef = useRef(0);
   const subscribeRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isSubscribedRef = useRef(false);
 
   // Clear push timer
   const clearPushTimer = useCallback(() => {
@@ -145,7 +146,9 @@ export function useRealtimeSync(options?: {
         (status) => {
           if (status === 'SUBSCRIBED') {
             subscribeRetryCountRef.current = 0;
+            isSubscribedRef.current = true;
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            isSubscribedRef.current = false;
             if (subscribeRetryCountRef.current < MAX_SUBSCRIBE_RETRIES) {
               subscribeRetryCountRef.current++;
               const delay = Math.min(
@@ -182,14 +185,18 @@ export function useRealtimeSync(options?: {
       triggerPush();
     }, SUPABASE_INIT_DELAY_MS);
 
-    // Re-pull from Supabase on window focus to reconcile notes that were
-    // hard-deleted remotely (DELETE events are dropped by the user_id filter
-    // when REPLICA IDENTITY doesn't include user_id in the payload).
+    // On window focus: push/pull to reconcile, and only reconnect the
+    // realtime subscription if it's in a failed state. Desktop windows
+    // lose/gain focus frequently — tearing down a healthy WebSocket each
+    // time causes unnecessary TIMED_OUT errors.
     const unlisten = getCurrentWindow().onFocusChanged(async ({ payload: focused }) => {
       if (!focused) return;
 
-      subscribeRetryCountRef.current = 0;
-      setupRealtime().catch(console.error);
+      if (!isSubscribedRef.current) {
+        subscribeRetryCountRef.current = 0;
+        setupRealtime().catch(console.error);
+      }
+
       triggerPush();
 
       try {
