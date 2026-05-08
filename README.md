@@ -1,50 +1,127 @@
-# Welcome to your Expo app 👋
+# noat
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A minimalist, local-first note-taking app with realtime cross-device sync. Native desktop (Tauri) and mobile (Expo / React Native) clients share a SQLite-backed sync engine over Supabase. Meant to replace sending text messages to yourself, it's like Raycast Floating Notes w/ sync :)
 
-## Get started
+> **Status: archived at v0.1.** noat was built between February and March 2026 as a learning project — cross-platform local-first sync, Tauri floating window UX, and Supabase realtime internals. It works end-to-end on macOS and iOS, and is no longer in active development. See [the retrospective on my blog](https://probablyalex.com/blog/wrapping-up-noat/) for what I learned.
 
-1. Install dependencies
+<p align="center">
+  <img src="docs/desktop-hero.png" alt="noat — translucent menubar window on macOS" width="900" />
+</p>
 
-   ```bash
-   npm install
-   ```
+## What it does
 
-2. Start the app
+A single notes pane, focused. No folders, no tags, no rich text. You get up to five notes per device, swipe between them, and they sync instantly across your devices.
 
-   ```bash
-   npx expo start
-   ```
+- Multiple notes with horizontal swipe / scroll-snap navigation (capped at 5)
+- Five color themes: paper, forest, ios, dark, cyberpunk
+- Translucent, dock-less menubar window on macOS (accessory app)
+- Global shortcut (`Option+/`) to toggle desktop window visibility
+- Debounced autosave to local SQLite — works fully offline
+- Realtime cloud sync via Supabase Postgres Changes (sub-100ms cross-device updates)
+- Auto-deletion of notes older than 7 days in the trash
 
-In the output, you'll find options to open the app in a
+## Architecture
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+   ┌──────────────┐       ┌──────────────┐
+   │   Desktop    │       │    Mobile    │
+   │    Tauri     │       │  Expo / RN   │
+   │  + SQLite    │       │  + SQLite    │
+   └──────┬───────┘       └───────┬──────┘
+          │                       │
+          │   postgres_changes    │
+          │   (realtime, <100ms)  │
+          └───────────┬───────────┘
+                      │
+                ┌─────▼─────┐
+                │ Supabase  │
+                │  Postgres │
+                └───────────┘
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Each client is local-first: writes hit SQLite immediately and the UI never blocks on the network. A separate sync layer pushes dirty rows on a 1.5s debounce after autosave, and a Postgres Changes subscription pulls remote edits in realtime. Pull-on-focus reconciles anything missed while the app was backgrounded.
 
-## Learn more
+<p align="center">
+  <img src="docs/sync-demo.gif" alt="Typing on iPhone, watching desktop update in realtime" width="420" />
+</p>
+<p align="center"><sub>Typing on the iPhone, desktop updating in realtime via Supabase postgres_changes.</sub></p>
 
-To learn more about developing your project with Expo, look at the following resources:
+The two clients share the Supabase client and shared types via the `@noat/sync` workspace package, but each owns its own SQLite layer (`expo-sqlite` is synchronous; Tauri's `plugin-sql` is async). The sync logic is intentionally parallel, not abstracted — the platform differences are small enough that abstraction would have cost more than it saved.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Repo layout
 
-## Join the community
+```
+apps/
+  desktop/        Tauri (Rust + React + Vite) — macOS / Windows / Linux client
+  mobile/         Expo (React Native) — iOS / Android client
+packages/
+  sync/           Shared Supabase client, types, and integration tests
+```
 
-Join our community of developers creating universal apps.
+Each app has its own `CLAUDE.md` with detailed architecture notes. The root `CLAUDE.md` documents shared conventions and the sync architecture's sharper edges.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Tech stack
+
+- **Frontend**: React 19, TypeScript (`strict: true`)
+- **Desktop**: Tauri 2 (Rust), Vite, `@tauri-apps/plugin-sql`
+- **Mobile**: Expo SDK 54, React Native 0.81, `expo-sqlite`, expo-router
+- **Sync**: Supabase Postgres Changes (realtime) + REST
+- **Tooling**: npm workspaces, Prettier, ESLint, husky + lint-staged, Vitest
+
+## Development
+
+```bash
+npm install
+```
+
+### Desktop (Tauri)
+
+```bash
+npm run desktop          # full Tauri app — Rust + Vite, Option+/ shortcut active
+npm run desktop:web      # web frontend only — fast iteration on UI without Rust
+```
+
+First Rust build takes a few minutes; subsequent builds are super fast.
+
+### Mobile (Expo)
+
+```bash
+npm run mobile           # Metro bundler — connect via dev build (not Expo Go)
+```
+
+The mobile app uses native modules (expo-sqlite, reanimated, live-markdown), so it requires a custom dev build — Expo Go won't load it. Build it once with:
+
+```bash
+cd apps/mobile
+npx expo run:ios               # iOS simulator
+npx expo run:ios --device      # connected iPhone via USB
+npx expo run:android           # Android (emulator or device)
+```
+
+### Tests
+
+```bash
+npm test                 # sync integration tests (Vitest)
+```
+
+### Quality
+
+```bash
+npm run typecheck        # tsc across all workspaces
+npm run lint             # ESLint across all workspaces
+npm run format           # Prettier auto-format
+```
+
+## Configuration
+
+Supabase credentials are committed in `packages/sync/src/supabase.ts` (anonymous client, public anon key — fine for a personal project). To point at your own Supabase instance, replace those constants and apply this schema to a `notes` table with RLS allowing `user_id` filtering. Realtime requires `REPLICA IDENTITY FULL` on the table — see the architecture notes in `CLAUDE.md` for why.
+
+## Why it's archived
+
+noat hit the goals I set for it: cross-platform architecture, a real Tauri app with native macOS integration, and Supabase realtime end-to-end. The next steps would have been auth, a real backend with RLS, polish, distribution, and I realized Apple Notes / DMing yourself is sufficient for 99% of people already, so I switched to working on other projects.
+
+If you want the technical retrospective and to learn more about the process — read [the wrap-up post on my blog](https://probablyalex.com/blog/wrapping-up-noat/).
+
+## License
+
+[MIT](./LICENSE)
