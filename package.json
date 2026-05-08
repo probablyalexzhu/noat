@@ -9,7 +9,8 @@
   ],
   "scripts": {
     "mobile": "npm run start --workspace=apps/mobile",
-    "desktop": "npm run dev --workspace=apps/desktop",
+    "desktop": "cd apps/desktop && npm run tauri dev",
+    "desktop:web": "npm run dev --workspace=apps/desktop",
     "format": "prettier --write .",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspace=packages/sync",
