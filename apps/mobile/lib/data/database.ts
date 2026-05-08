@@ -168,7 +168,7 @@ export function upsertNoteFromRemote(note: Record<string, unknown>): void {
     `INSERT INTO notes (${cols.join(',')}, is_synced)
      VALUES (${placeholders}, 1)
      ON CONFLICT(id) DO UPDATE SET ${updates}, is_synced = 1`,
-    cols.map((c) => note[c]),
+    cols.map((c) => note[c]) as SQLite.SQLiteBindValue[],
   );
 }
 
